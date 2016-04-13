@@ -9,8 +9,6 @@ open Parser
 open Verifast0
 open Verifast1
 
-
-
 module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   
   include VerifyProgram1(VerifyProgramArgs)
@@ -25,7 +23,6 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   let auto_lemmas: (string, auto_lemma_info) Hashtbl.t = Hashtbl.create 10
 
   let lemma_rules = ref []
-       
 
   let add_lemma_rule symb rule = 
     (begin match try_assq symb !lemma_rules with
@@ -36,7 +33,6 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   
   include CheckFile1(CheckFileArgs)
   
-  let autopredicate file =  externalprint_predicates (lines_from_files file) file (loc_of_firststruct)
   let _ = if options.option_verbose = -1 then Printf.printf "%10.6fs: >> verification of %s \n" (Perf.time()) filepath  
 
   (* Region: production of assertions *)
@@ -76,7 +72,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         branch
            (fun () -> assume (eval None env con) (fun () -> assert_expr_split e1 h env l msg url))
            (fun () -> assume (ctxt#mk_not (eval None env con)) (fun () -> assert_expr_split e2 h env l msg url))
-    | Operation(l0, And, [e1; e2], tps) ->
+    | WOperation(l0, And, [e1; e2], tps) ->
       branch
         (fun () -> assert_expr_split e1 h env l msg url)
         (fun () -> assert_expr_split e2 h env l msg url)
@@ -232,7 +228,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       evalpat false ghostenv env rhs tp tp $. fun ghostenv env t ->
       let slice = Chunk ((array_element_symb(), true), [instantiate_type tpenv tp], coef, [a; i; t], None) in
       cont (slice::h) ghostenv env
-    | WPointsTo (l, Var (lv, x, scope), tp, rhs) -> 
+    | WPointsTo (l, WVar (lv, x, GlobalName), tp, rhs) -> 
       let (_, type_, symbn, _) = List.assoc x globalmap in    
       evalpat false ghostenv env rhs tp tp $. fun ghostenv env t ->
       let symb = 
@@ -441,10 +437,10 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       else if isInputParam then
         None
       else
-        ((*Mahmoud*)(update_postcondition_counter (ctxt#pprint v) (ctxt#pprint t) l); assert_false h env l (Printf.sprintf "Cannot prove %s == %s" (ctxt#pprint t) (ctxt#pprint v)) None)
+        assert_false h env l (Printf.sprintf "Cannot prove %s == %s" (ctxt#pprint t) (ctxt#pprint v)) None
     in
     match pat with
-    | SrcPat (LitPat (Var (lx, x, scope))) when !scope = Some LocalVar ->
+    | SrcPat (LitPat (WVar (lx, x, LocalVar))) ->
       begin match try_assoc x env with
         Some t' -> match_terms (prover_convert_term t' tp0 tp) t
       | None -> let binding = (x, prover_convert_term t tp tp0) in cont ghostenv (binding::env) (binding::env')
@@ -575,8 +571,8 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     if not (predname_eq g g' && List.for_all2 unify targs targs0) then None else
     let inputParamCount = match inputParamCount with None -> max_int | Some n -> n in
     match_pats h l ghostenv env env' inputParamCount 0 pats tps0 tps ts0 $. fun ghostenv env env' ->
-    match_coef ghostenv env $. fun chunk ghostenv env coef0 newChunks -> 
-        Some (chunk, coef0, ts0, size0, ghostenv, env, env', newChunks)
+    match_coef ghostenv env $. fun chunk ghostenv env coef0 newChunks ->
+    Some (chunk, coef0, ts0, size0, ghostenv, env, env', newChunks)
   
   let lookup_points_to_chunk_core h0 f_symb t =
     let rec iter h =
@@ -730,18 +726,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             env: (string * term) list -- Updated environment
             env': (string * term) list -- Updated list of bindings of declared but unbound variables
     *)
-    
-  (*By Mahmoud*)
-  
-  let rec print_ghostenv ghostenv = 
-    match ghostenv with
-    
-       |[] -> kfprintf (fun _ -> flush stdout) stdout "%s %s" "Empty ghostenv" "\n"
-       |x :: y  -> kfprintf (fun _ -> flush stdout) stdout "%s %s %S" "This is ghostenv: " x "\n"; print_ghostenv y
-  (*End*)
-         
   let consume_chunk_core rules h ghostenv env env' l g targs coef coefpat inputParamCount pats tps0 tps cont =
-    (*(print_ghostenv ghostenv);*)
     let rec consume_chunk_core_core h =
       let rec iter hprefix h =
         match h with
@@ -824,22 +809,20 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             | _ -> Printf.sprintf "<%s>" (String.concat ", " (List.map string_of_type targs))
           in
           let patvars = ref [] in
-          let rec string_of_pat pat=
+          let rec string_of_pat pat =
             match pat with
-            | LitPat (Var (_, x, scope)) when !scope = Some LocalVar -> if List.mem_assoc x env then ctxt#pprint (List.assoc x env) else "_"
+            | LitPat (WVar (_, x, LocalVar)) -> if List.mem_assoc x env then ctxt#pprint (List.assoc x env) else "_"
             | LitPat e -> if !patvars = [] || lists_disjoint !patvars (vars_used e) then ctxt#pprint (eval None env e) else "<expr>"
             | DummyPat -> "_"
             | VarPat (_, x) -> patvars := x::!patvars; "_"
             | WCtorPat (_, i, targs, g, ts0, ts, pats) -> Printf.sprintf "%s(%s)" g (String.concat ", " (List.map string_of_pat pats))
-          in
-          let enviroment = env
           in
           let string_of_pat0 pat0 =
             match pat0 with
               TermPat t -> ctxt#pprint t
             | SrcPat pat -> string_of_pat pat
           in
-          (*By Mahmoud*)(print_missingheap_precondition predname targs (List.map string_of_pat0 pats) h env);(*End*)      Printf.sprintf "No matching heap chunks: %s%s(%s)" predname targs (String.concat ", " (List.map string_of_pat0 pats)) 
+          Printf.sprintf "No matching heap chunks: %s%s(%s)" predname targs (String.concat ", " (List.map string_of_pat0 pats))
         in
         assert_false h env l message (Some "nomatchingheapchunks")
   (*      
@@ -893,7 +876,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         fun chunk h coef ts size ghostenv env env' ->
         check_dummy_coefpat l coefpat coef;
         cont [chunk] h ghostenv env env' size
-      | Var (lv, x, scope) -> 
+      | WVar (lv, x, GlobalName) -> 
         let (_, type_, symbn, _) = List.assoc x globalmap in  
         let symb = 
           match try_pointee_pred_symb type_ with
@@ -966,7 +949,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | WPredAsn (l, g, is_global_predref, targs, pats0, pats) -> pred_asn l real_unit_pat g is_global_predref targs (srcpats pats0) (srcpats pats)
     | WInstPredAsn (l, e_opt, st, cfin, tn, g, index, pats) ->
       inst_call_pred l real_unit_pat e_opt tn g index pats
-    | ExprAsn (l, Operation (lo, Eq, [Var (lx, x, scope); e], tps)) when !scope = Some LocalVar ->
+    | ExprAsn (l, WOperation (lo, Eq, [WVar (lx, x, LocalVar); e], tps)) ->
       begin match try_assoc x env with
         Some t -> assert_term (ctxt#mk_eq t (ev e)) h env l "Cannot prove condition." None; cont [] h ghostenv env env' None
       | None -> let binding = (x, ev e) in cont [] h ghostenv (binding::env) (binding::env') None
@@ -1112,10 +1095,10 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
               iter conds asn1 (fun conds -> iter conds asn2 cont)
             | IfAsn (_, cond, asn1, asn2) ->
               if expr_is_fixed inputVars cond then
-                iter (cond::conds) asn1 cont @ iter (Operation (dummy_loc, Not, [cond], ref None)::conds) asn2 cont
+                iter (cond::conds) asn1 cont @ iter (WOperation (dummy_loc, Not, [cond], [boolt])::conds) asn2 cont
               else
                 []
-            | ExprAsn (_, Operation (_, Eq, [Var (_, x, _); e], _)) when not (List.mem x inputVars) && expr_is_fixed inputVars e ->
+            | ExprAsn (_, WOperation (_, Eq, [WVar (_, x, _); e], _)) when not (List.mem x inputVars) && expr_is_fixed inputVars e ->
               cont conds
             | ExprAsn (_, e) when expr_is_fixed inputVars e ->
               cont (e::conds)
@@ -1125,7 +1108,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
               flatmap 
                 (fun (SwitchAsnClause (l, casename, args, boxinginfo, asn)) ->
                   if (List.length args) = 0 then
-                    let cond = Operation (l, Eq, [e; Var (l, casename, ref (Some PureCtor))], ref (Some [AnyType; AnyType])) in
+                    let cond = WOperation (l, Eq, [e; WVar (l, casename, PureCtor)], [AnyType; AnyType]) in
                     iter (cond :: conds) asn cont
                   else 
                    []
@@ -1217,7 +1200,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                 (pmap, symb)
         in
         if match target_opt with Some e -> expr_is_fixed inputParameters e | None -> true then begin
-          let target = match target_opt with Some e -> Some e | None -> Some (Var(l2, "this", ref (Some LocalVar))) in
+          let target = match target_opt with Some e -> Some e | None -> Some (WVar(l2, "this", LocalVar)) in
           construct_edge qsymb coef target [] [index] [] conds
         end else
           []
@@ -1228,14 +1211,14 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           match coef with
             None -> Some (LitPat frac)
           | Some DummyPat -> Some DummyPat
-          | Some (LitPat coef) -> Some (LitPat (Operation(dummy_loc, Mul, [frac;coef], ref (Some [RealType; RealType]))))
+          | Some (LitPat coef) -> Some (LitPat (WOperation(dummy_loc, Mul, [frac;coef], [RealType; RealType])))
         in
         iter new_coef conds asn
       | Sep(_, asn1, asn2) ->
         (iter coef conds asn1) @ (iter coef conds asn2)
       | IfAsn(_, cond, asn1, asn2) ->
         if expr_is_fixed inputParameters cond then
-          (iter coef (cond :: conds) asn1) @ (iter coef (Operation(dummy_loc, Not, [cond], ref None) :: conds) asn2)
+          (iter coef (cond :: conds) asn1) @ (iter coef (WOperation(dummy_loc, Not, [cond], [boolt]) :: conds) asn2)
         else
           (iter coef conds asn1) @ (iter coef conds asn2) (* replace this with []? *)
       | _ -> []
@@ -1313,9 +1296,9 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                 [(outer_l, outer_symb, outer_nb_curried, outer_fun_sym, outer_is_inst_pred, outer_formal_targs, outer_actual_indices, outer_formal_args, outer_formal_input_args, outer_wbody, inner_frac_expr_opt, inner_target_opt, inner_formal_targs, inner_formal_indices, inner_input_exprs, conds)] ->
                 let extra_conditions: expr list = List.map2 (fun cn e2 -> 
                     if language = Java then 
-                      Operation(dummy_loc, Eq, [ClassLit(dummy_loc, cn); e2], ref (Some [ObjType "java.lang.Class"; ObjType "java.lang.Class"]))
+                      WOperation(dummy_loc, Eq, [ClassLit(dummy_loc, cn); e2], [ObjType "java.lang.Class"; ObjType "java.lang.Class"])
                     else 
-                      Operation(dummy_loc, Eq, [Var(dummy_loc, cn, ref (Some FuncName)); e2], ref (Some [PtrType Void; PtrType Void]))
+                      WOperation(dummy_loc, Eq, [WVar(dummy_loc, cn, FuncName); e2], [PtrType Void; PtrType Void])
                 ) outer_actual_indices0 inner_formal_indices in
                 (* these extra conditions ensure that the actual indices match the expected ones *)
                 [(outer_l, outer_symb, outer_nb_curried, outer_fun_sym, outer_is_inst_pred, outer_formal_targs, outer_actual_indices, outer_formal_args, outer_formal_input_args, outer_wbody, inner_frac_expr_opt, inner_target_opt, inner_formal_targs, inner_formal_indices, inner_input_exprs, extra_conditions @ conds)]

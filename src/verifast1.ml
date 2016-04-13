@@ -1,4 +1,3 @@
-open Printf
 open Proverapi
 open Big_int
 open Printf
@@ -9,11 +8,6 @@ open Ast
 open Lexer
 open Parser
 open Verifast0
-
-(*open Leakfix*)
-
-
-
 
 module type VERIFY_PROGRAM_ARGS = sig
   val emitter_callback: package list -> unit
@@ -27,8 +21,6 @@ module type VERIFY_PROGRAM_ARGS = sig
   val reportUseSite: decl_kind -> loc -> loc -> unit
   val reportExecutionForest: node list ref -> unit
   val breakpoint: (string * int) option
-  val genPredicate: bool
-  val autofix: bool
   val targetPath: int list option
 end
 
@@ -99,312 +91,35 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   
   let globalPluginMap = ref []
   
-(*By: Mahmoud*)
-
- let print_and_return_termnode g = (*kfprintf (fun _ -> flush stdout) stdout "String %s" (ctxt#pprint g); fprintf stdout "\n";*) g
- let print_termnode g = ()(*kfprintf (fun _ -> flush stdout) stdout "String %s" (ctxt#pprint g); fprintf stdout "\n"*)
-  
-
- let pprint_leaked_context_term t = 
-    if options.option_simplify_terms then
-      match ctxt#simplify t with None -> print_termnode t | Some(t) -> print_termnode t
-    else
-      print_termnode t
-
- let rec print_leaked_chunk_argument ts = match ts with 
-   x :: [] -> pprint_leaked_context_term x;       
-  |x :: y -> pprint_leaked_context_term x; print_leaked_chunk_argument y
-   
- let return_leaked_context_term t = 
-    if options.option_simplify_terms then
-      match ctxt#simplify t with None -> ctxt#pprint t | Some(t) -> ctxt#pprint t
-    else
-      ctxt#pprint t
-
- let rec return_leaked_chunk_arguments ts = match ts with 
-   x :: [] -> return_leaked_context_term x :: [];       
-  |x :: y -> (return_leaked_context_term x) :: (return_leaked_chunk_arguments y)
-   
-
-
- let print_leaked_chunk h msg = 
-       match h with
-        (Chunk ((g, literal), targs, coef, ts, size)) :: [] -> kfprintf (fun _ -> flush stdout) stdout "This is the leaked chunk: "; print_termnode g; print_leaked_chunk_argument ts
-       |(Chunk ((g, literal), targs, coef, ts, size)) :: y -> kfprintf (fun _ -> flush stdout) stdout "This is the leaked chunk: "; print_termnode g; print_leaked_chunk_argument ts
-       
-  let rec print_env env = match env with 
-     (s, t) :: [] -> kfprintf (fun _ -> flush stdout) stdout "%s" s; kfprintf (fun _ -> flush stdout) stdout "%s" (ctxt#pprint t)
-    |(s, t) :: x ->  kfprintf (fun _ -> flush stdout) stdout "%s" s; kfprintf (fun _ -> flush stdout) stdout "%s \n" (ctxt#pprint t); print_env x
-
- 
- let rec create_leaked_heap h env (leaked_h : leaked_heap)= 
-       match h with
-        (Chunk ((g, literal), targs, coef, ts, size)) :: [] ->  
-             (match leaked_h with 
-              Leak_chunk ((s, a::b)) :: x  ->  Leak_chunk ((ctxt#pprint g), (return_leaked_chunk_arguments ts)) :: Leak_chunk ((s, a::b)) :: x
-              |_ -> Leak_chunk ((ctxt#pprint g), (return_leaked_chunk_arguments ts)) :: [])       
-       |(Chunk ((g, literal), targs, coef, ts, size)) :: y ->                  
-             match leaked_h with 
-               Leak_chunk ((s, a::b)) :: x  ->  Leak_chunk ((ctxt#pprint g), (return_leaked_chunk_arguments ts)) :: Leak_chunk ((s, a::b)) :: x
-              |_ -> Leak_chunk ((ctxt#pprint g), (return_leaked_chunk_arguments ts)) :: []    
-
- (*The following let function is the same as the brevious function, but I had to write it again for name convention*) 
-
- let rec create_partial_heap h env= 
-       match h with
-        [] -> []
-    |   (Chunk ((g, literal), targs, coef, ts, size)) :: y ->  printnow "%s %s \n" "heeap "(ctxt#pprint g);
-            Leak_chunk ((ctxt#pprint g), (return_leaked_chunk_arguments ts)) :: (create_partial_heap y env)
-              
-    
-      
- let rec return_leaked_heap h env=
-    match h with
-        [] -> []
-    |   Chunk((g, literal), targs, coef, ts, size) :: nextchunk ->
-        Leak_chunk((ctxt#pprint g), (return_leaked_chunk_arguments ts)) :: (return_leaked_heap nextchunk env)
-       
- let print_string name = kfprintf (fun _ -> flush stdout) stdout "%s " name
- 
- let rec print_arg (arguments: string list) oc firstarg = 
-    match arguments with
-        x :: [] -> if(firstarg) then (output_string_file oc "(";  output_string_file oc x; output_string_file oc ")") else (output_string_file oc x; output_string_file oc ")")
-        |x :: y -> if(firstarg) then (output_string_file oc "("; output_string_file oc x; output_string_file oc ","; print_arg y oc false) else (output_string_file oc x; output_string_file oc ","; print_arg y oc false)
-     
- let check_predicate name = Str.split_delim (Str.regexp "[0..9]+") name
- let return_predicate_name names = 
-    match names with
-        x :: [] -> x
-       |x :: y  -> x
-             
-     
- let rec print_leaked_heap (leaked_h : leaked_heap) oc =
-    match leaked_h with 
-        [] -> ()
-   |    Leak_chunk (name, arguments) :: x ->  (output_string_file oc (return_predicate_name (check_predicate name)));  (print_arg arguments oc true) (*I commented the following line because i want to print one postcondition per time, not the whole postcondition per once*) (*(print_leaked_heap x oc); flush oc *) 
-
- let rec check_result_value_arg arguments resultvalue = 
-    match arguments with 
-        x :: [] -> if x = resultvalue then "result" :: [] else x :: [] 
-        |x :: y -> if x = resultvalue then "result" :: check_result_value_arg y resultvalue  else x :: check_result_value_arg y resultvalue
-       
-
- let rec check_result_value leaked_h resultvalue = 
-    match leaked_h with
-        [] -> []
-    |   Leak_chunk (name, arguments) :: x  -> Leak_chunk (name, (check_result_value_arg arguments resultvalue)) :: check_result_value x resultvalue  
-        
- let rec check_leaked_returned_value env leaked_h = 
-    match env with
-        (s, t) :: [] -> if s = "result" then (check_result_value leaked_h (ctxt#pprint t)) else leaked_h  
-       |(s, t) :: x -> if s = "result" then (check_result_value leaked_h (ctxt#pprint t)) else (check_leaked_returned_value x leaked_h)
-   
-
-   
- let input_line_opt ic =
-  try Some (input_line ic)
-  with End_of_file -> None
- 
-let print_line l = kfprintf (fun _ -> flush stdout) stdout "%i " l; l 
- 
-let print_string_line l =  kfprintf (fun _ -> flush stdout) stdout "%s" l
-
-let missing_heap msg = 
-    match msg with 
-        message -> String.sub message  (print_line ((String.index message ':') + 1)) ((print_line (String.length message)) - (print_line ((String.index message ':') + 1)))
-
-
-let print_missing_heap msg oc=
-    output_string_file oc msg; flush oc
-
-let new_post_cond line = String.sub line 0 (String.index line ';')
-
-let new_pre_cond line = String.sub line 0 (String.index line ';')
-
-let add_new_post leaked_h oc = 
-    output_string_file oc " &*& "; 
-    print_leaked_heap leaked_h oc; 
-    output_string_file oc ";"
-    
-let add_new_pre msg oc = output_string_file oc " &*& "; flush oc; print_missing_heap msg oc; output_string_file oc ";"; flush oc    
-
-open Printf
-
-(*Any function starts with externalprint means that it modifies the .c file that is being verified*)
-
-let externalprint_post file_lines file leaked_h line_no= 
-let oc = open_out file in
-    let rec modify i file_lines =     
-        match file_lines with
-           | line :: [] -> 
-                if (line = "\n") then 
-                    (output_string_file oc "\n") 
-                else (if(i = line_no) then 
-                    (output_string_file oc (new_post_cond line); add_new_post leaked_h oc; output_string_file oc "\n") 
-                else 
-                    (output_string_file oc line; output_string_file oc "\n"))
-           | line :: nextline -> 
-                if (line = "\n") then 
-                    (output_string_file oc "\n"; modify (succ i) nextline) 
-                else (if (i = line_no) then 
-                    (output_string_file oc (new_post_cond line); add_new_post leaked_h oc; output_string_file oc "\n"; modify (succ i) nextline) 
-                else (output_string_file oc line; output_string_file oc "\n"; modify (succ i) nextline))
-           | [] -> close_out oc;
-   in modify 1 file_lines
-           
-           
-let externalprint_pre file_lines file msg line_no =
-let oc = open_out file in
-    let rec modify i file_lines =
-        match file_lines with
-              [] -> close_out oc
-            | line :: nextline -> 
-                if (line = "\n") then             
-                    (output_string_file oc "\n";
-                    modify (succ i) nextline) 
-                else (if (i = line_no) then 
-                    (output_string_file oc (new_pre_cond line); 
-                    add_new_pre msg oc; 
-                    output_string_file oc "\n"; 
-                    modify (succ i) nextline) 
-                else      
-                    (output_string_file oc line; 
-                    output_string_file oc "\n";
-                    modify (succ i) nextline))
-           in modify 1 file_lines
-           
-let externalprint_open_stmt file_lines file msg line_no =
-let oc = open_out file in
-    let rec modify i file_lines =
-        match file_lines with
-            [] -> close_out oc
-        |   line :: nextline -> 
-                if (line = "\n") then 
-                    (output_string_file oc "\n"; modify (succ i) nextline) 
-                else (if (i = line_no) then 
-                    (output_string_file oc line; output_string_file oc msg; modify (succ i) nextline) 
-                else (output_string_file oc line; output_string_file oc "\n"; modify (succ i) nextline))
-           in modify 1 file_lines
-
-    
-let read_line i = try Some (input_line i) with End_of_file -> None 
-
-let lines_from_files filename =
-  let rec lines_from_files_aux i acc = match (read_line i) with 
-    | None -> List.rev acc
-    | Some s -> lines_from_files_aux i (s :: acc) in 
-  lines_from_files_aux (open_in filename) [] 
-
-
-
-
-(*End*)
-
-  let pprint_context_stack cs=  
+  let pprint_context_stack cs =
     List.map
       (function
          Assuming t -> Assuming (pprint_context_term t)
-       | Executing (h, env, l, msg) ->                           
+       | Executing (h, env, l, msg) ->
          let h' =
            List.map
              begin function
-               (Chunk ((g, literal), targs, coef, ts, Some (PluginChunkInfo info))) -> 
+               (Chunk ((g, literal), targs, coef, ts, Some (PluginChunkInfo info))) ->
                let [_, ((_, plugin), _)] = !globalPluginMap in
-               Chunk ((ctxt#pprint g, literal), targs, pprint_context_term coef, [plugin#string_of_state info], None) 
+               Chunk ((ctxt#pprint g, literal), targs, pprint_context_term coef, [plugin#string_of_state info], None)
              | (Chunk ((g, literal), targs, coef, ts, size)) ->
-               Chunk ((ctxt#pprint (print_and_return_termnode g), literal), targs, pprint_context_term coef, List.map (fun t -> pprint_context_term t) ts, size)  
+               Chunk ((ctxt#pprint g, literal), targs, pprint_context_term coef, List.map (fun t -> pprint_context_term t) ts, size)
              end
              h
          in
          let env' = List.map (fun (x, t) -> (x, pprint_context_term t)) env in
          Executing (h', env', l, msg)
        | PushSubcontext -> PushSubcontext
-       | PopSubcontext ->  PopSubcontext
-       | Branching branch ->  Branching branch)
+       | PopSubcontext -> PopSubcontext
+       | Branching branch -> Branching branch)
       cs
 
-(*By: Mahmoud -> the search_context_Stack is very similar to print_context_stack, but it doesn't print anything. It just returns the line number of consuming assertion after which the leak happens. *)
- let search_context_stack_post cs=  
-    List.map
-      (function
-         Assuming t -> 0
-       | Executing (h, env, l, msg) ->   (match msg with
-                "Consuming assertion" -> 
-                    (match l with
-                         ((s, r, col), (s1, r1, col1)) -> kfprintf (fun _ -> flush stdout) stdout "%i " r; r) 
-                | _ -> 0)
-       | PushSubcontext -> 0
-       | PopSubcontext ->  0
-       | Branching branch ->  0)
-      cs
-   
- let search_context_stack_pre cs=  
-    List.map
-      (function
-         Assuming t -> 0
-       | Executing (h, env, l, msg) ->   (match msg with
-                "Producing assertion" -> 
-                    (match l with
-                         ((s, r, col), (s1, r1, col1)) -> kfprintf (fun _ -> flush stdout) stdout "%i " r; r) 
-                | _ -> 0)
-       | PushSubcontext -> 0
-       | PopSubcontext ->  0
-       | Branching branch ->  0)
-      cs  
-      
   let register_pred_ctor_application t symbol symbol_term ts inputParamCount =
     pred_ctor_applications := (t, (symbol, symbol_term, ts, inputParamCount)) :: !pred_ctor_applications
 
-
-
-(* So if there is some kind of leak, this assert_false funciton will be called with the remaining heap that causes the leak and a msg of "Function leaks heap chunks" *)
-
-let line_no l = 
-    match l with
-       ((s, r, col), (s1, r1, col1)) -> (kfprintf (fun _ -> flush stdout) stdout "%i " r)
-
-(*By Mahmoud: this is really a bad idea, but I don't have any clue now, so I will improve it later*)
-let rec determine_no list_of_nos = 
-    match list_of_nos with
-        x :: [] -> if (x > 0) then x else 0
-       |x :: y :: z  -> if (x > y) then (determine_no (x :: z)) else (determine_no (y :: z)) 
-
-
-let is_no_matching msg =
-    if(String.length msg > 25) then
-        let msg_first_part = (String.sub msg 0 25) in
-            match msg_first_part with
-                "No matching heap chunks: " -> (String.sub msg 25 ((String.length msg) - 25))
-            |   _ -> "Other error type"    
-    else
-        "Other error type"
-        
-
-
-(*Any function ends with _test like the next function means that this funciton was just written for test purposes*)
-let rec print_test env =
-    match env with
-        [] -> kfprintf (fun _ -> flush stdout) stdout "%s " "\n"
-    |   (s, t) :: env -> 
-            kfprintf (fun _ -> flush stdout) stdout "%s %s " s " - "; print_test env
-            
-let print_context_stack_test cs =
-    match cs with
-        Executing (h, env, l, msg) :: cs -> print_test env
-    |   _   -> ()
-    
-        
-let assert_false h env l msg url = 
-   (match l with 
-        ((s, r, col), (s1, r1, col1)) ->
-            (match  (is_no_matching msg) with 
-                "Other error type" -> ()
-            |   message -> () (*(print_context_stack_test !contextStack); externalprint_pre (lines_from_files s) s message (print_line ((determine_no (search_context_stack_pre !contextStack)))))*) )
-               
-    );  (*By Mahmoud*) 
+  let assert_false h env l msg url =
     raise (SymbolicExecutionError (pprint_context_stack !contextStack, "false", l, msg, url))
-
-                                
+  
   let push_node l msg =
     let oldPath, oldBranch, oldTargetPath = !currentPath, !currentBranch, !targetPath in
     targetPath :=
@@ -443,7 +158,7 @@ let assert_false h env l msg url =
   let pop_contextStack () = pop_undoStack(); let h::t = !contextStackStack in contextStack := h; contextStackStack := t
   
   let with_context_force msg cont =
-    !stats#execStep; (* I think in this line, we increase the execution step counter by 1*)
+    !stats#execStep;
     push_contextStack ();
     push_context msg;
     let result = cont() in
@@ -451,7 +166,7 @@ let assert_false h env l msg url =
     result
   
   let with_context msg cont =
-    !stats#execStep; (* I think in this line, we increase the execution step counter by 1*)
+    !stats#execStep;
     push_contextStack ();
     push_context msg;
     let result =
@@ -583,7 +298,7 @@ let assert_false h env l msg url =
     | UChar -> ProverInt
     | Char -> ProverInt
     | InductiveType _ -> ProverInductive
-    | StructType sn -> assert false
+    | StructType sn -> failwith "Using a struct as a value is not yet supported."
     | ObjType n -> ProverInt
     | ArrayType t -> ProverInt
     | StaticArrayType (t, s) -> ProverInt
@@ -674,17 +389,23 @@ let assert_false h env l msg url =
   let max_char_big_int = big_int_of_string "127"
   let max_char_term = ctxt#mk_intlit_of_string "127"
   
+  let limits_of_type t =
+    match t with
+    | Char -> (min_char_term, max_char_term)
+    | UChar -> (min_uchar_term, max_uchar_term)
+    | ShortType -> (min_short_term, max_short_term)
+    | UShortType -> (min_ushort_term, max_ushort_term)
+    | IntType -> (min_int_term, max_int_term)
+    | UintPtrType | PtrType _ -> (int_zero_term, max_uint_term)
+  
   let get_unique_var_symb x t = 
     ctxt#mk_app (mk_symbol x [] (typenode_of_type t) Uninterp) []
   
   let assume_bounds term tp = 
     match tp with
-      Char -> ignore $. ctxt#assume (ctxt#mk_and (ctxt#mk_le min_char_term term) (ctxt#mk_le term max_char_term));
-    | UChar -> ignore $. ctxt#assume (ctxt#mk_and (ctxt#mk_le min_uchar_term term) (ctxt#mk_le term max_uchar_term));
-    | ShortType -> ignore $. ctxt#assume (ctxt#mk_and (ctxt#mk_le min_short_term term) (ctxt#mk_le term max_short_term));
-    | UShortType -> ignore $. ctxt#assume (ctxt#mk_and (ctxt#mk_le min_ushort_term term) (ctxt#mk_le term max_ushort_term));
-    | IntType -> ignore $. ctxt#assume (ctxt#mk_and (ctxt#mk_le min_int_term term) (ctxt#mk_le term max_int_term));
-    | PtrType _ | UintPtrType -> ignore $. ctxt#assume (ctxt#mk_and (ctxt#mk_le (ctxt#mk_intlit 0) term) (ctxt#mk_le term max_ptr_term));
+      Char|UChar|ShortType|UShortType|IntType|UintPtrType|PtrType _ ->
+      let min, max = limits_of_type tp in
+      ignore $. ctxt#assume (ctxt#mk_and (ctxt#mk_le min term) (ctxt#mk_le term max))
     | _ -> ()
   
   let get_unique_var_symb_non_ghost x t = 
@@ -1307,16 +1028,9 @@ let assert_false h env l msg url =
     if language = Java then [] else
     let [PackageDecl(_,"",[],ds)] = ps in iter [] ds
   
-  (*By Mahmoud: I believe the following function deals with structs that already had some prototypes, but the declaration itself was delayed.*)
-  
-  
   let delayed_struct_def sn ldecl ldef =
     structures_defined := (sn, ldecl, ldef)::!structures_defined
   
-  
-
-    
-  (*By Mahmoud: the next function is the function that traverse through the (ds: I believe declarations) and check just the struct declarations*)
   let structdeclmap =
     let rec iter sdm ds =
       match ds with
@@ -1340,10 +1054,7 @@ let assert_false h env l msg url =
     match ps with
       [PackageDecl(_,"",[],ds)] -> iter [] ds
     | _ when file_type path=Java -> []
-   
-   
- 
-    
+  
   let enumdeclmap = 
     let rec iter edm ds = 
       match ds with
@@ -1376,12 +1087,12 @@ let assert_false h env l msg url =
                 let rec eval e =
                   match e with
                     IntLit (_, n, _) -> n
-                  | Var (l, x, _) ->
+                  | Var (l, x) ->
                     begin match try_assoc2 x enummap1 enummap0 with
                       None -> static_error l "No such enumeration constant" None
                     | Some n -> n
                     end
-                  | Operation (l, op, [e1; e2], _) ->
+                  | Operation (l, op, [e1; e2]) ->
                     let n1 = eval e1 in
                     let n2 = eval e2 in
                     begin match op with
@@ -1780,867 +1491,6 @@ let assert_false h env l msg url =
    
   let structmap = structmap1 @ structmap0
   
-  (*By Mahmoud*)
-  
-    (*By Mahmoud*) 
-  let autgendeclmap=
-    if(autofix) then begin
-        let rec iter autodm ds =
-            match ds with 
-                [] -> []
-             |  Autogen(s1, s2) :: ds -> Autogen(s1, s2) :: iter autodm ds 
-             | _ :: ds -> iter autodm ds
-        in
-        match ps with
-          [PackageDecl(_,"",[],ds)] -> iter [] ds
-        | _ when file_type path=Java -> []
-    end
-    else
-     []
-  (*End*) 
-  
-  
-  let print_predicate_param fields =
-    match fields with 
-        None -> ()
-    |   Some v -> (kfprintf (fun _ -> flush stdout) stdout "3333: %s4444, " v)
-  
- 
-
- (* let print_predicates =
-    let rec iter predicatefamily ds =
-        match ds with 
-            [] -> ()
-        |   PredFamilyInstanceDecl(_,name, _, _, fields, body) :: ds -> (name, (generate_param fields), generate_body body);(kfprintf (fun _ -> flush stdout) stdout "\n 111111%s22222:" name); print_predicate_param fields; iter predicatefamily ds
-        |   _ :: ds -> iter predicatefamily ds
-    in
-    match ps with
-      [PackageDecl(_,"",[],ds)] -> iter [] ds
-    | _ when file_type path=Java -> ()
-                       *)
- 
-  
-  let check_fields fds_opt =
-    match fds_opt with
-       Some (Field(a1,a2,a3,a4,a5,a6,a7,a8) :: a9) -> ()(* kfprintf (fun _ -> flush stdout) stdout "%s" s *)
-   |   _ -> ()
-  
-  let print_Struct =
-    let rec iter ds =
-        match ds with
-            [] ->  ()(*kfprintf (fun _ -> flush stdout) stdout "String: %s" "No more structs. \n"*)
-        |   (sn, (((s,l,l1),(s1,l2,l3)), fds_opt))::dss -> (*kfprintf (fun _ -> flush stdout) stdout "String struct: %s %s %i %s" sn " : " l "\n";*) (check_fields fds_opt); (iter dss)
-    in iter structdeclmap
-    
-    let loc_of_firststruct =
-        let rec iter ds line_no =
-            match ds with
-                [] -> line_no
-            |   (sn, (((s,l,l1),(s1,l2,l3)), fds_opt))::dss ->
-                if(line_no = 0) then
-                    iter dss l
-                else if (l < line_no) then
-                    iter dss l 
-                else 
-                    iter dss line_no
-        in iter structdeclmap 0 
-  
-  let checknormalfieldtype type_ =
-        match type_ with
-            Bool -> "Bool"
-          | Void -> "Void"
-          | IntType -> "Int"
-          | UShortType -> "UShort"
-          | ShortType -> "Short"
-          | UintPtrType -> "Other"  (* The uintptr_t type from the C99 standard. It's an integer type big enough to hold a pointer value. *)
-          | RealType -> "Other"  (* Mathematical real numbers. Used for fractional permission coefficients. Also used for reasoning about floating-point code. *)
-          | Float -> "Float"
-          | Double -> "Double"
-          | LongDouble -> "LongDouble"
-          | UChar -> "UChar"
-          | Char -> "Char"
-          | StructType(s) -> "String"
-          | PtrType(t) -> "Other"
-          | FuncType(s) -> "Other"   (* The name of a typedef whose body is a C function type. *)
-       (*   | InductiveType of string * type_ list -> "Other"
-          | PredType of string list * type_ list * int option * inductiveness -> "Other" (* if None, not necessarily precise; if Some n, precise with n input parameters *)
-          | PureFuncType of type_ * type_ -> "Other"  (* Curried *)
-          | ObjType of string -> "Other"
-          | ArrayType of type_ -> "Other"
-          | StaticArrayType of type_ * int -> "Other" (* for array declarations in C *)
-          | BoxIdType -> "Other" (* box type, for shared boxes *)
-          | HandleIdType -> "Other" (* handle type, for shared boxes *)
-          | AnyType -> "Other" (* supertype of all inductive datatypes; useful in combination with predicate families *)
-          | TypeParam of string -> "Other" (* a reference to a type parameter declared in the enclosing datatype/function/predicate *)
-          | InferredType of < > * type_ option ref -> "Other" (* inferred type, is unified during type checking. '< >' is the type of objects with no methods. This hack is used to prevent types from incorrectly comparing equal, as in InferredType (ref None) = InferredType (ref None). Yes, ref None = ref None. But object end <> object end. *)
-          | ClassOrInterfaceName of string -> "Other" (* not a real type; used only during type checking *)
-          | PackageName of string -> "Other" (* not a real type; used only during type checking *)
-          | RefType of type_ -> "Other" (* not a real type; used only for locals whose address is taken *)
-          | PluginInternalType of DynType.dyn -> "Other"
-  *)
-  let rec checkfieldtype fieldtype =
-        match fieldtype with
-            StructTypeExpr(l,s) -> s
-          | PtrTypeExpr(l,t) -> checkfieldtype t
-          | ArrayTypeExpr(l,t) -> checkfieldtype t
-          | StaticArrayTypeExpr(l, t, i) -> checkfieldtype t
-          | ManifestTypeExpr(l, t) -> checknormalfieldtype t  (* A type expression that is obviously a given type. *)
-          | IdentTypeExpr(loc,Some (s1), s) -> s
-          
-          (*| ConstructedTypeExpr of loc * string * type_expr list  (* A type of the form x<T1, T2, ...> *)
-          | PredTypeExpr of loc * type_expr list * int option (* if None, not necessarily precise; if Some n, precise with n input parameters *)
-  *)
-          | PureFuncTypeExpr(l, (t::t1)) -> checkfieldtype t  
-          | _ -> ""
-    let rec print_pat pat =
-        match pat with 
-            LitPat(exp) ->  ""  (* literal pattern *)
-        |   VarPat(l, s) ->  s  (* var pattern, aangeduid met ? in code *)
-        |   DummyPat ->  ""
-        |   CtorPat(l, s1, (pat2 :: pat3)) ->  ""
-        |   WCtorPat(_,_,_,_,_,_,_) ->  ""
-  
-    let rec print_exp expr =
-        match expr with
-            True(_) -> ("","")
-          | False(_) -> ("","")
-          | Null(_) ->  ("","")
-          | Var(_,s3,_) ->  ("", s3)  (* An identifier. *)
-          | Operation(_,_,_,_) ->  ("","")
-          | IntLit (_,_,_) ->  ("","")
-          | RealLit(_,_) -> ("","")
-          | StringLit(_,_) -> ("","")
-          | ClassLit(_,_) -> ("","") (* class literal in java *)
-          | Read(_, Var(_,s2,_),s) -> (s2, s) (* lezen van een veld; hergebruiken voor java field access *)
-          | ArrayLengthExpr(_,_) -> ("","")
-          | WRead(_,_,_,_,_,_,_,_) -> ("","")
-          | _ -> ("","")
-          (*
-          (* Expression which returns the value of a field of an instance of an
-           * inductive data type. *)
-          | WReadInductiveField of
-              loc *
-              expr (* The expression which results an instance of the inductive
-                    * data type. (usually just a variable) *) *
-              string (* inductive data type name *) *
-              string (* constructor name *) *
-              string (* field name *) *
-              type_ list (* type arguments *)
-          | ReadArray of loc * expr * expr
-          | WReadArray of loc * expr * type_ * expr
-          | Deref of loc * expr * type_ option ref (* pointee type *) (* pointer dereference *)
-          | CallExpr of (* oproep van functie/methode/lemma/fixpoint *)
-              loc *
-              string *
-              type_expr list (* type arguments *) *
-              pat list (* indices, in case this is really a predicate assertion *) *
-              pat list (* arguments *) *
-              method_binding
-          | ExprCallExpr of (* Call whose callee is an expression instead of a plain identifier *)
-              loc *
-              expr *
-              expr list
-          | WFunPtrCall of loc * string * expr list
-          | WPureFunCall of loc * string * type_ list * expr list
-          | WPureFunValueCall of loc * expr * expr list
-          | WFunCall of loc * string * type_ list * expr list
-          | WMethodCall of
-              loc *
-              string (* declaring class or interface *) *
-              string (* method name *) *
-              type_ list (* parameter types (not including receiver) *) *
-              expr list (* args, including receiver if instance method *) *
-              method_binding
-          | NewArray of loc * type_expr * expr
-          | NewObject of loc * string * expr list
-          | NewArrayWithInitializer of loc * type_expr * expr list
-          | IfExpr of loc * expr * expr * expr
-          | SwitchExpr of
-              loc *
-              expr *
-              switch_expr_clause list *
-              (loc * expr) option * (* default clause *)
-              (type_ * (string * type_) list * type_ list * type_) option ref (* used during evaluation when generating an anonymous fixpoint function, to get the prover types right *)
-          | PredNameExpr of loc * string (* naam van predicaat en line of code*)
-          | CastExpr of loc * bool (* truncating *) * type_expr * expr (* cast *)
-          | Upcast of expr * type_ (* from *) * type_ (* to *)  (* Not generated by the parser; inserted by the typechecker. Required to prevent bad downcasts during autoclose. *)
-          | TypedExpr of expr * type_  (* Not generated by the parser. In 'TypedExpr (e, t)', 't' should be the type of 'e'. Allows typechecked expression 'e' to be used where a not-yet-typechecked expression is expected. *)
-          | WidenedParameterArgument of expr (* Appears only as part of LitPat (WidenedParameterArgument e). Indicates that the predicate parameter is considered to range over a larger set (e.g. Object instead of class C). *)
-          | SizeofExpr of loc * type_expr
-          | AddressOf of loc * expr
-          | ProverTypeConversion of prover_type * prover_type * expr  (* Generated during type checking in the presence of type parameters, to get the prover types right *)
-          | ArrayTypeExpr' of loc * expr (* horrible hack --- for well-formed programs, this exists only during parsing *)
-          | AssignExpr of loc * expr * expr
-          | AssignOpExpr of loc * expr * operator * expr * bool (* true = return value of lhs before operation *) * type_ list option ref * type_ option ref
-          | InstanceOfExpr of loc * expr * type_expr
-          | SuperMethodCall of loc * string * expr list
-          | WSuperMethodCall of loc * string * expr list * (loc * ghostness * (type_ option) * (string * type_) list * asn * asn * ((type_ * asn) list) * visibility)
-          | InitializerList of loc * expr list
-          | SliceExpr of loc * pat option * pat option
-            *)
-    let print_otherpat pat =
-        []
-    
-    let rec generate_body body = 
-        match body with
-        |   Sep(_,PointsTo(_,Read(_, Var(_,structname,_),fieldname),VarPat(l, newgostname)),asn2) -> Name_ref(structname, fieldname, newgostname ) :: generate_body asn2
-        |   Sep(_,PredAsn(_,predref,_,[], (LitPat(Var(_,fieldname,_)):: restt)),asn2) ->  Inner_pred(predref#name, (fieldname :: print_otherpat restt)) :: generate_body asn2
-        |   PredAsn(_,predref,_, [], LitPat(Var(_,fieldname,_)):: restt) -> Inner_pred(predref#name, (fieldname :: print_otherpat restt)) :: []
-        |   IfAsn(_,_,asnn1,asnn2) -> generate_body asnn2
-        |   _ -> []
-
- 
- 
- 
-  (*          
-    let rec generate_body body = 
-    match body with
-    |   InstPredAsn(l, expr, name, expr1, _) -> (kfprintf (fun _ -> flush stdout) stdout "I am here: %s \n" name); ("","","")
-    |   PredAsn(_,_,_,_,_) -> (kfprintf (fun _ -> flush stdout) stdout "I am here: %s \n" "Type 2"); ("","","")
-    |   WPredAsn(_,_,_,_,_,_) -> (kfprintf (fun _ -> flush stdout) stdout "I am here: %s \n" "Type 3"); ("","","")
-    |   WInstPredAsn(_,_,_,_,_,_,_,_) -> (kfprintf (fun _ -> flush stdout) stdout "I am here: %s \n" "Type 4"); ("","","")
-    |   PointsTo(_,expr1,pat) ->   (kfprintf (fun _ -> flush stdout) stdout "I am here: %s \n" "Type 5"); ((print_exp expr1), (print_pat pat))
-    |   WPointsTo(_,_,_,_) -> (kfprintf (fun _ -> flush stdout) stdout "I am here: %s \n" "Type 6"); ("","","")
-    |   ExprAsn(_,_) -> (kfprintf (fun _ -> flush stdout) stdout "I am here: %s \n" "Type 7"); ("","","")
-    |   Sep(_,asn1,asn2) -> (kfprintf (fun _ -> flush stdout) stdout "I am here: %s \n" "Type 8"); generate_body asn1 :: generate_body asn2
-    |   CoefAsn(_,_,_) -> (kfprintf (fun _ -> flush stdout) stdout "I am here: %s \n" "Type 9"); ("","","")
-    |   PluginAsn(_,_) -> (kfprintf (fun _ -> flush stdout) stdout "I am here: %s \n" "Type 10"); ("","","")
-    |   WPluginAsn(_,_,_) -> (kfprintf (fun _ -> flush stdout) stdout "I am here: %s \n" "Type 11"); ("","","")
-    |   EnsuresAsn(_,_) -> (kfprintf (fun _ -> flush stdout) stdout "I am here: %s \n" "Type 13"); ("","","")
-    |   MatchAsn(_,_,_) -> (kfprintf (fun _ -> flush stdout) stdout "I am here: %s \n" "Type 14"); ("","","")
-    |   WMatchAsn(_,_,_,_) -> (kfprintf (fun _ -> flush stdout) stdout "I am here: %s \n" "Type 15"); ("","","") 
-    |   IfAsn(_,_,asnn1,asnn2) -> (kfprintf (fun _ -> flush stdout) stdout "I am here: %s \n" "Type 16"); generate_body asnn1 :: generate_body asnn2
-    |   _ -> (kfprintf (fun _ -> flush stdout) stdout "I am here: %s \n" "Not this type"); ("","","")
-*)
- 
-  let rec generate_param fields =
-    match fields with
-        [] -> []
-    |   (t, name) :: fields -> (checkfieldtype t, name) :: generate_param fields 
-  
-  let print_predicates =
-    if(autofix) then begin
-    let rec iter predicatefamily ds =
-        match ds with 
-            [] -> []
-        |   PredFamilyInstanceDecl(_,name, _, _, fields, body) :: ds -> (*((name, (generate_param fields),*) (name, (generate_param fields), (generate_body body)) :: (iter predicatefamily ds) (*) :: iter predicatefamily ds)*)
-        |   _ :: ds -> iter predicatefamily ds
-    in
-    match ps with
-      [PackageDecl(_,"",[],ds)] -> iter [] ds
-    | _ when file_type path=Java -> []
-    end
-    else
-    []
-
-(*  let check_precondition parametername loc =
-    let rec iter ds =
-        match ds with
-            [] -> "Error not other parameter found"
-        |   ExprAsn(((s, l1, l2),(s1, l3, l4)),expr) :: ds -> 
-                (if(l1 = loc) then
-                    match expr with
-                        True(_) -> (kfprintf (fun _ -> flush stdout) stdout "Inside Expr: %s \n" "T1111")
-                      | False(_) -> (kfprintf (fun _ -> flush stdout) stdout "Inside Expr: %s \n" "T2222")
-                      | Null(_) -> (kfprintf (fun _ -> flush stdout) stdout "Inside Expr: %s \n" "T3333")
-                      | Var(_,s3,_) -> (kfprintf (fun _ -> flush stdout) stdout "Inside Expr: %s \n" s3) (* An identifier. *)
-                      | Operation(_,_,_,_) -> (kfprintf (fun _ -> flush stdout) stdout "Inside Expr: %s \n" "T55555555555")
-                      | IntLit (_,_,_) -> (kfprintf (fun _ -> flush stdout) stdout "Inside Expr: %s \n" "Typeeeee 66666666666666666")
-                      | RealLit(_,_) -> (kfprintf (fun _ -> flush stdout) stdout "Inside Expr: %s \n" "Typeeeee 7777777777777777777")
-                      | StringLit(_,_) -> (kfprintf (fun _ -> flush stdout) stdout "Inside Expr: %s \n" "Typeeeee 888888888888")
-                      | ClassLit(_,_) ->  (kfprintf (fun _ -> flush stdout) stdout "Inside Expr: %s \n" "Typeeeee 99999999999") (* class literal in java *)
-                      | Read(_, Var(_,s2,_),s) ->  (kfprintf (fun _ -> flush stdout) stdout "Inside Expr: %s \n" s) (* lezen van een veld; hergebruiken voor java field access *)
-                      | ArrayLengthExpr(_,_) ->(kfprintf (fun _ -> flush stdout) stdout "Inside Expr: %s \n" "Typeeeee 11111")
-                      | WRead(_,_,_,_,_,_,_,_) -> (kfprintf (fun _ -> flush stdout) stdout "Inside Expr: %s \n" "Typeeeee 1222222222222")
-                      | _ -> (kfprintf (fun _ -> flush stdout) stdout "Inside Expr: %s \n" "Typeeeee 13")); ""
-   in
-    match ps with
-      [PackageDecl(_,"",[],ds)] -> iter ds
-    | _ when file_type path=Java -> []
-                                            
-  *)
-  
-  let rec print_predicates_test print_predicates =
-    match print_predicates with
-        [] -> ()
-    |   (name, parameters, body) :: next ->  kfprintf (fun _ -> flush stdout) stdout "Field name: %s %s" name "\n"; print_predicates_test next
-  
-  
-  let create_new_struct_map newstructmap =
-    let rec iter ds = 
-        match ds with
-            [] -> newstructmap
-        |   (sn, (l, fds_opt))::dss -> 
-                let rec add_struct_fields fds_opt =
-                    match fds_opt with
-                    
-                        Some([]) -> []
-                    |   Some (Field(a1,a2,a3,a4,a5,a6,a7, Some (a8)) :: a9) ->
-                            Structfields((checkfieldtype a3), a4) :: (add_struct_fields (Some (a9)))
-                
-                    |   Some (Field(a1,a2,a3,a4,a5,a6,a7, None) :: a9) ->
-                            Structfields((checkfieldtype a3), a4) :: (add_struct_fields (Some (a9)))   
-                    
-                    |   None -> []
-                in 
-                Structref(sn, add_struct_fields fds_opt, None) :: iter dss
-    in iter structdeclmap
-    
-    let rec check_struct_structure newstructmap =
-        match newstructmap with
-            [] -> newstructmap
-        |   Structref(sn, allfields, None) :: rest -> 
-            let rec iter fields=
-                match fields with
-                    [] -> Structref(sn, allfields, None) :: (check_struct_structure rest)
-                |   Structfields(ident, fieldname) :: fieldsrest -> 
-                    if(ident = sn) then
-                        Structref(sn, allfields, Some (Structure(fieldname, "Linkedlist"))) :: (check_struct_structure rest)
-                    else 
-                        (iter fieldsrest)
-            in iter allfields
-   (* in check_struct_structure (create_new_struct_map []) *)
-        
-                    
-
-  let rec print_struct_fields fields =
-    match fields with
-        [] -> ()
-    |   Structfields(iden, fieldname) :: nextfields -> kfprintf (fun _ -> flush stdout) stdout "Field name: %s %s %s %s" fieldname " : " iden "\n"; print_struct_fields nextfields
-
-  let print_new_struct_map newstmp=
-    let rec iter newstmp =
-        match newstmp with
-            [] -> kfprintf (fun _ -> flush stdout) stdout "String: %s" "No more structs. \n"
-        |   Structref(name, fields, x) :: nextstructs -> kfprintf (fun _ -> flush stdout) stdout "Strut name: %s %s" name " : "; print_struct_fields fields; 
-                (if (x = None) then  kfprintf (fun _ -> flush stdout) stdout " %s" "Not a linkedlist" else  kfprintf (fun _ -> flush stdout) stdout "%s" " A linkedlist"); 
-                iter nextstructs
-    in iter newstmp
-  
- (* let () = print_new_struct_map (check_struct_structure (create_new_struct_map [])) *)
-  
-  
-  
-  
-  let rec print_all_fields structname fields oc =
-    match fields with
-        [] -> output_string_file oc " &*& malloc_block_"; output_string_file oc structname; output_string_file oc "("; output_string_file oc structname;output_string_file oc ") " 
-    |   Structfields(iden, fieldname) :: fields -> 
-            output_string_file oc structname; output_string_file oc "->"; output_string_file oc fieldname; output_string_file oc " |-> ?"; output_string_file oc fieldname; 
-            (if(fields <> []) then
-                output_string_file oc " &*& "
-            else
-                ());
-        print_all_fields structname fields oc
-  
-  let rec find_fieldname fields y oc =
-    match fields with
-        [] -> "error"
-    |   Structfields(iden, fieldname) :: fields -> 
-            if(iden = y) then 
-                fieldname 
-            else 
-                (find_fieldname fields y oc)
-            
-  
-  
-  let rec print_autogen_fields structname fields autogenmap oc=
-    match autogenmap with
-        [] -> ()
-    |   Autogen(x, y) :: autogenmap -> 
-            if(x = structname) then 
-                (output_string_file oc "&*& "; output_string_file oc y; output_string_file oc "("; output_string_file oc (find_fieldname fields y oc); output_string_file oc ", count)";   (print_autogen_fields structname fields autogenmap oc))
-            else 
-                (print_autogen_fields structname fields autogenmap oc)
-  
-  
-      
-  let rec check_contain_llist autogenmap structname oc flag=
-    match autogenmap with
-        [] -> 
-                if(flag = 0) then
-                        output_string_file oc ";) = \n"
-                else
-                        output_string_file oc "; \n"
-    |   Autogen(x, y) :: autogenmap ->
-            if(x = structname) then
-                if (flag = 0) then 
-                    (output_string_file oc "; int count) = \n")
-                else 
-                    (output_string_file oc " &*& count >= 0; \n")
-            else 
-                check_contain_llist autogenmap structname oc flag
-  
-                
-  let print_inner_structure structname structure autogenmap oc =
-    match structure with
-        Some (Structure (x, "Linkedlist")) -> output_string_file oc " &*& "; output_string_file oc structname; output_string_file oc "("; output_string_file oc x; output_string_file oc ", ?count1) &*& count == count1 + 1 &*& count > 0; \n"
-    |   None -> (check_contain_llist autogenmap structname oc 1)
-  
-  let print_predicate_body structname fields autogenmap structure oc = 
-    print_all_fields structname fields oc; print_autogen_fields structname fields autogenmap oc; print_inner_structure structname structure autogenmap oc
-    
-
-  
-  let print_predicate_parameters structname fields autogenmap structure oc = 
-   output_string_file oc " (struct "; output_string_file oc structname; output_string_file oc " *"; output_string_file oc structname; 
-    match structure with
-        Some (Structure(_, "Linkedlist")) ->  output_string_file oc "; int count) = \n "; output_string_file oc structname; output_string_file oc " == 0 ? count == 0 : "; print_predicate_body structname fields autogenmap structure oc
-    |   None ->  (check_contain_llist autogenmap structname oc 0);
-    print_predicate_body structname fields autogenmap structure oc
-            
-   
-  
-  let generate_predicate autogenmap oc newstructmap = 
-    if(newstructmap <> []) then
-        (output_string_file oc "//The following predicates are auto generated \n"; flush oc; output_string_file oc "/*@ \n"; flush oc;
-        let rec iter newstructmap =
-            match newstructmap with 
-             [] -> output_string_file oc "@*/ \n"; flush oc
-        |    Structref(structname, fields, structure) :: nextnewstructmap -> output_string_file oc "\n"; flush oc; output_string_file oc "predicate";output_string_file oc " "; output_string_file oc structname; flush oc; print_predicate_parameters structname fields autogenmap structure oc; iter nextnewstructmap
-        in iter newstructmap)
-   else output_string_file oc "Errrrrrrrrrrrrrrrrrrrrrrrror"
-       
-       
-       
-let externalprint_predicates file_lines file line_no =
- let oc = open_out file in
-    let rec modify i file_lines =
-        match file_lines with
-            |line :: [] -> if (line = "\n") then (output_string_file oc "\n"; flush oc) else (if(i = line_no) then ((generate_predicate (autgendeclmap) oc (check_struct_structure (create_new_struct_map []))); output_string_file oc "\n"; flush oc) else (output_string_file oc line; output_string_file oc "\n"; flush oc))
-            | line :: nextline -> if (line = "\n") then (output_string_file oc "\n"; flush oc; modify (succ i) nextline) else (if (i = line_no) then ((generate_predicate (autgendeclmap) oc (check_struct_structure (create_new_struct_map []))); flush oc; output_string_file oc "\n"; flush oc; output_string_file oc line; modify (succ i) nextline) else (output_string_file oc line; output_string_file oc "\n"; flush oc; modify (succ i) nextline))
-           | [] -> close_out oc;
-           in modify 1 file_lines
-
-  
-  let print_predicatemap predicatemap=
-    let rec iter predicatemap=
-        match predicatemap with 
-            [] -> ()
-        |   (name, parameter, body) :: predicaterest -> kfprintf (fun _ -> flush stdout) stdout "Name: %s %s" name " - "; 
-                let rec iterbody body =
-                    match body with
-                    |   [] -> ()
-                    |   Name_ref(s1, s2, s3) :: rest ->   kfprintf (fun _ -> flush stdout) stdout "Fuzz: %s %s %s" s1 s2 s3; iterbody rest
-                    |   Inner_pred(s1, s2::[]) :: rest -> (kfprintf (fun _ -> flush stdout) stdout "Fuzz: %s %s " s1 s2)
-                in iterbody body; iter predicaterest                
-    in iter predicatemap 
-  
-  let rec print_leaked_heap_test l_heap =
-        match l_heap with 
-                [] -> kfprintf (fun _ -> flush stdout) stdout "Leeaaak: %s %s" "No more leaks" "\n"
-        |       Leak_chunk(name, parameters) :: rest -> ((kfprintf (fun _ -> flush stdout) stdout "Leeaak: %s %s" name "\n"); print_leaked_heap_test rest)
-  
-  let rec check_existance_heap predicate_body l_heap = 
-    match l_heap with
-        [] -> false
-    |   Leak_chunk(name, parameters) :: rest_heap ->
-            match predicate_body with
-                Name_ref(structname, fieldname, newreferencename) -> 
-                    if(name = (String.concat  "_" (structname :: fieldname :: []) )) 
-                        then true 
-                        else check_existance_heap predicate_body rest_heap
-            |   Inner_pred (innerpredicatename, paramters) -> true
-
-           
-           
-let rec consume_leak_intopredicate l_heap predicatebody =
-    match predicatebody with
-        [] -> true
-        (*There is a mistake in the comming line that I will ignore now for simplicity, but I have to reconsider this function action. The l_heap need to be updated if the check existance_heap function returned true*)
-    |   bodyfirst :: bodyrest -> if(check_existance_heap bodyfirst l_heap) then consume_leak_intopredicate l_heap bodyrest else false
-    
-
-
-
-let rec return_encapspredicate predicatename (predmap: predicate_map) =
-    match predmap with
-        (predname, predicateparam, predicatebody) :: predmap ->
-            if(predicatename = predname)
-                then (predname, predicateparam, predicatebody)
-                else return_encapspredicate predicatename predmap
-
-
-
-let remove_encapsulated_chunk predbody l_chunk chunkname =
-    let rec iter predbody =
-        match predbody with
-            [] -> l_chunk
-        |   Name_ref(structname, fieldname, newreferencename) :: predicatebody -> 
-                if(chunkname = (String.concat  "_" (structname :: fieldname :: []) )) 
-                    then Leak_chunk("",("" :: [])) (*Adding dummy leaks*)
-                    else iter predicatebody
-        |   Inner_pred (innerpredicatename, paramters) :: predicatebody -> printnow "%s %s %s \n" "Cheeeck" chunkname innerpredicatename;
-                if(chunkname = innerpredicatename) 
-                    then Leak_chunk("",("" :: [])) (*Adding dummy leaks*)
-                    else iter predicatebody
-    in iter predbody
-            
-        
-
-
-let update_leak l_heap predicatename (predmap: predicate_map) =
-    match (return_encapspredicate predicatename predmap) with
-        (predname, predicateparam, predicatebody) -> 
-            let rec iter (l_heap : leaked_heap) =
-                match l_heap with
-                    [] -> []
-                |   (Leak_chunk(name, parameters) :: rest) ->
-                        (remove_encapsulated_chunk predicatebody (Leak_chunk(name, parameters)) name) :: iter rest
-            in iter l_heap
-                
-let rec remove_dummy_leaks l_heap =
-    match l_heap with
-        [] -> []
-    |   Leak_chunk(name, parameters) :: l_heap ->
-            match name with 
-                "" -> remove_dummy_leaks l_heap
-            |   _  -> Leak_chunk(name, parameters) :: (remove_dummy_leaks l_heap)  
-    
-
-
-let rec auto_close_predicate (l_heap: leaked_heap) (predmap: predicate_map) =
-    match predmap with
-        [] -> "The leaked heap cann't be encapsulated into predicate"
-    |   (predicatename, predicateparam, predicatebody) :: predmap ->
-            if(consume_leak_intopredicate l_heap predicatebody) then
-                predicatename
-            else auto_close_predicate l_heap predmap
-                        
-
-let rec malloc_name leak predicatename= printnow "%s " predicatename;
-    match leak with
-        [] -> ""
-    |   Leak_chunk(name, parameters) :: rest_heap ->  printnow "%s \n" name;
-            if((String.length name) > 12) then
-                if((String.sub name 0 12) = "malloc_block") then
-                    if((String.sub name 13 ((String.length name) - 13)) = predicatename) then
-                        match parameters with
-                            structname :: [] -> structname
-                    else
-                        malloc_name rest_heap predicatename
-                else
-                    malloc_name rest_heap predicatename
-            else
-                malloc_name rest_heap predicatename 
-        
-let check_leak_existance h env = return_leaked_heap h env
-
-let rec check_local_name name env =
-    match env with
-        [] -> name
-    |   (s, t) :: env -> 
-            if (name = (ctxt#pprint t)) then
-                s
-            else begin
-               check_local_name name env
-            end
-
-
-
-
-let rec check_local_name0 name cs row= 
-    match cs with
-        [] -> ""
-    |   Executing (h, env, l, msg) :: cs ->
-            (let rec iter_context row env= 
-                (match l with
-                   ((s,r,c),(s1,r1,c1)) ->
-                    (if(row = r) then
-                        (let rec iter env =
-                            match env with
-                                [] -> check_local_name0 name cs row
-                            |   (s, t) :: env ->  
-                                    (if (name = (ctxt#pprint t)) then
-                                       s
-                                    else
-                                       iter env)
-                         in iter env)
-                    
-                     else
-                        (check_local_name0 name cs row)))
-            in iter_context row env)                           
-    |   _ :: cs -> check_local_name0 name cs row
-      
-
-let check_ghostlocal_name name cs row = 
-    match name with
-        "_" ->       
-            let rec check_ghost_exist i =
-                let new_ghost = (Printf.sprintf "%s%i" "count" i) in
-                    if((check_local_name0 new_ghost cs row) = "") then
-                        Printf.sprintf "%s%s" "?" new_ghost 
-                    else
-                        (check_ghost_exist (i+1))
-            in check_ghost_exist 0
-    |   _ -> check_local_name0 name cs row
-                   
-
-let rec check_other_predicate_parameters predicatename predicatemap =
-    match predicatemap with
-        [] -> []
-    |   (name, parameters, body) :: predicatemap -> 
-            if(name = predicatename) then
-              let rec iter parameters =
-                    match parameters with
-                        [] -> []
-                        (*The following line also depends on the assumption that the struct name is the same as the predicate name*)
-                    |   (ttype, paramname) :: parameters -> if(ttype <> predicatename) then begin 
-                            if(paramname = "count") then "0" :: (iter parameters) else (Printf.sprintf "%s%i" paramname 0) :: (iter parameters) end else iter parameters
-              in iter parameters
-            else check_other_predicate_parameters predicatename predicatemap 
-                    
- (*The following function filters the leaked heap and produce only chunks that should be written in the post condition and not be consumed at the end of the function*)
- let rec filter_lheap lheap predmap = 
-    match lheap with
-        [] -> []
-    |   Leak_chunk (name, arguments) :: lheap ->
-            let rec iter predmap0 =
-                match predmap0 with
-                    [] -> Leak_chunk(name, arguments) :: filter_lheap lheap predmap
-                |   (predname, parameters, body) :: predmap0 ->
-                        let rec iter0 body =
-                            match body with
-                                [] -> iter predmap0
-                            |   Inner_pred (innerpredicatename, parameters) :: body ->
-                                    if(name = innerpredicatename) then
-                                        filter_lheap lheap predmap
-                                    else
-                                        iter0 body
-                            |   _ :: body ->
-                                    iter0 body
-                        in iter0 body
-            in iter predmap
-                                    
-                    
-    
-        
-let rec auto_close_stmt heap_leak l env= 
-    if(autofix) then
-        match l with
-            ((s, r, col), (s1, r1, col1)) ->
-                match (auto_close_predicate heap_leak (print_predicates)) with
-                    "The leaked heap cann't be encapsulated into predicate" ->
-                        externalprint_post (lines_from_files s) s (filter_lheap (check_leaked_returned_value env heap_leak) (print_predicates))  (determine_no (search_context_stack_post !contextStack)) 
-                |   predicatename -> 
-                        (auto_close_stmt (((Leak_chunk(predicatename, ((check_local_name (malloc_name heap_leak predicatename) env) :: (check_other_predicate_parameters predicatename (print_predicates))))) :: remove_dummy_leaks(update_leak heap_leak predicatename (print_predicates)))) l env)
-    
-          
-        
-(*I will assume in the following function that the name of preducate should be the same as the name of the struct*)        
-let check_missingheap predname targs parameters env l =
-       let rec iter parameters =
-        match parameters with
-            [] -> ()
-        |   x :: parameters -> iter parameters
-    in iter parameters
-        
-        
-
-let rec check_locality infered_count cs row = 
-    match cs with
-        [] -> false
-    |   Executing (h, env, l, msg) :: cs -> begin
-            match l with
-                ((s1,r1,c1),(s2,r2,c2)) -> 
-                         let rec iter env =
-                            match env with
-                                [] -> (check_locality infered_count cs row)
-                            |   (s, t) :: env -> 
-                                    if (infered_count = ctxt#pprint t) then
-                                        if(row = r1) then true else (iter env)                         
-                                    else
-                                        (iter env)
-                        in iter env
-            end                           
-    |   _ :: cs -> (check_locality infered_count cs row)
-   
-
-let rec create_assumptions_list cs =
-    match cs with
-        [] -> []
-    |   Assuming t :: cs -> Assuming t :: (create_assumptions_list cs)
-    |   _   :: cs -> create_assumptions_list cs
-    
-let rec create_assum_exp assumptions =
-    match assumptions with
-        [] -> []
-    |   Assuming t :: assumptions ->
-            if(try (String.contains (ctxt#pprint t) '+') with _ -> false && try (String.contains (ctxt#pprint t) '=') with _ -> false) then
-                let assumption = 
-                    String.trim (ctxt#pprint t)
-                in ((try (String.sub assumption 0 ((String.index assumption '=') - 1)) with _ -> (ctxt#pprint t)), (try (String.sub assumption ((String.index assumption '(') + 1) ((String.index assumption '+') - (String.index assumption '(') - 2)) with _ -> ""), (try (String.sub assumption ((String.index assumption '+') + 1) ((String.index assumption ')') - (String.index assumption '+') - 1)) with _ -> "")) :: (create_assum_exp assumptions) 
-            else
-                create_assum_exp assumptions
-
-
-(*Mahmoud: all functions with a name starting by test should be removed at the end*)
-let rec test_print_assumptions assumptions_list =
-    match assumptions_list with
-        [] -> ()
-    |   (leftoperand, rightoperand, addition) :: assumptions_list -> (test_print_assumptions assumptions_list)
-    
-    
-let rec solve_assump_equations assumptions_list infered_count (counter: int) =
-    printnow "%s \n" infered_count;
-    match assumptions_list with
-        [] -> (Printf.sprintf "%s%s%i" infered_count "-" counter)
-    |   (left, right, value) :: partial_assumptions_list ->
-            if(right = infered_count) then
-                solve_assump_equations assumptions_list left (counter + 1)
-            else 
-                solve_assump_equations partial_assumptions_list infered_count counter 
-                       
-    
-let rec check_assumptions infered_count cs =
-    match cs with
-        [] -> infered_count
-    |   Assuming t :: contextStack -> ctxt#pprint t
-    |   _ :: contextStack -> check_assumptions infered_count contextStack
-        
-let check_infered_conut infered_count cs row =
-    if((try (Str.search_forward (Str.regexp "[a-z]+[0-9]*") infered_count 0) with Not_found -> -1) >= 0) then 
-        if(check_locality (Str.matched_string infered_count) cs row) then
-            infered_count
-        else
-             solve_assump_equations (create_assum_exp (create_assumptions_list !contextStack)) (Str.matched_string infered_count) 0
-    else
-        infered_count
-             
-        
-let modify_postcondition s row col1 col2 infered_count wrong_count =
-    let lines =
-        lines_from_files s
-    in
-    let rec modify i row lines =
-        match lines with
-            [] -> []
-        |   line :: lines -> 
-                if (i = (row -1)) then                 
-                    let col =
-                        (*The flowing line ensures that the wrong_count is a seperate word, not part of other word*)
-                        let wrong_count0 = Printf.sprintf "%s%s" " " wrong_count and wrong_count1 = Printf.sprintf "%s%s" "," wrong_count in
-                        try ((Str.search_forward (Str.regexp wrong_count1) line col2) + 1) with
-                            Not_found -> 
-                                try ((Str.search_forward (Str.regexp wrong_count0) line col2) + 1) with
-                                    Not_found -> -1
-                    in
-                    let modifiedline =
-                        if(col = -1) then 
-                            line 
-                        else
-                            Printf.sprintf "%s%s%s" (String.sub line 0 (col)) (check_infered_conut infered_count !contextStack (row)) (String.sub line (col+(String.length wrong_count)) ((String.length line) - (col+(String.length wrong_count)))) 
-                    in 
-                        modifiedline :: lines
-                else
-                    line :: (modify (i+1) row lines)
-    in modify 0 row lines
-                    
-let print_modified_file lines s =
-    let oc = open_out s in
-        let rec update_file lines =
-            match lines with
-                [] -> close_out oc
-            |   line :: lines -> (if (line = "\n") then (output_string_file oc "\n") else (output_string_file oc line; output_string_file oc "\n")); update_file lines
-        in update_file lines
-        
-       
-           
-    
-    
-let update_postcondition_counter wrong_count infered_count l=
-    if(autofix) then
-        match l with
-            ((s, r1, col1), (s1, r2, col2)) -> print_modified_file (modify_postcondition s r1 col1 col2 infered_count wrong_count) s
-   
-
-        
-let rec parameters_list parameters row = 
-    match parameters with
-        [] -> []
-    |   x :: parameters -> ((check_ghostlocal_name x !contextStack row) :: (parameters_list parameters row))
-    
-let rec parameters_list0 parameters row =
-    match parameters with
-        [] -> []
-    |   x :: parameters -> printnow "%s: %s \n" "I am printing x" x;
-            if((try(Str.search_forward (Str.regexp "count") x 0) with Not_found -> -1) > -1) then
-                ((check_infered_conut x !contextStack row) :: (parameters_list0 parameters row))
-            else
-                ((check_ghostlocal_name x !contextStack row) :: (parameters_list0 parameters row))   
-                    
-let rec search_heap predname heap r parameters0 =
-    match heap with
-        [] -> ""
-    |   Leak_chunk(predicatename, parameters) :: heap -> printnow "%s %s \n" predname predicatename;
-            if(predname = predicatename) then
-                match parameters with
-                        [] -> search_heap predname heap r parameters0
-                |       par1 :: restparameters -> 
-                                match parameters0 with
-                                        [] -> search_heap predname heap r parameters0
-                                |       par2 :: restparameters0 ->
-                                                if(par1 = par2) then
-                                                        Printf.sprintf "\n//@open %s%s%s%s%s \n" predname "(" (String.concat "," (parameters_list0 parameters r)) ")" ";"
-                                                else
-                                                        search_heap predname heap r parameters0
-            else 
-                search_heap predname heap r parameters0
-                
-
- 
-let print_missingheap_precondition predname targs parameters h env=
-    if(autofix) then begin
-        let context =
-             match !contextStack with 
-                Executing (h, env, loc, msg) :: rest -> begin
-                    if( msg = "Consuming assertion") then begin
-                        let rec call_verify rest =
-                            match rest with
-                                [] -> Executing (h, env, loc, msg)
-                            |   Executing (h, env, l, msg) :: rest -> call_verify rest
-                            |   PushSubcontext :: rest -> begin
-                                match rest with 
-                                    |   Executing (h1, env1, l1, msg1) :: rest -> Executing (h1, env1, l1, msg1)
-                                    |   _   ->  Executing (h, env, loc, msg)
-                                end   
-                        in call_verify rest
-                    end 
-                    else
-                        Executing (h, env, loc, msg)
-                end
-        in
-        match context with
-             Executing (h1, env1, loc1, msg1) ->
-                let l = loc1 and env = env1
-                in
-        let heap = create_partial_heap h env in             
-            match l with
-                ((s, r, col), (s1, r1, col1)) ->
-                    let predicatename = (String.sub predname 0 (try (String.index predname '_') with Not_found -> (String.length predname))) in
-                        let message = (search_heap predicatename heap r parameters) in
-                            if(message = "") then
-                               let message = Printf.sprintf "%s%s%s%s" (*(String.sub predname 0 (String.index predname '_'))*) predicatename "(" (String.concat "," (parameters_list0 parameters r)) ")" 
-                                in 
-                                    externalprint_pre (lines_from_files s) s message (print_line ((determine_no (search_context_stack_pre !contextStack))));   
-                            else
-                                externalprint_open_stmt (lines_from_files s) s message (r-1);
-                                if((try (Str.search_forward (Str.regexp "count[0-9]*") message 0) with Not_found -> -1) > -1) then
-                                    let message1 = Str.matched_string message in
-                                        if((try (Str.search_forward (Str.regexp "[-][0-9]+") message 0) with Not_found -> -1) > -1) then
-                                            let message2 = Printf.sprintf "%s %s %s" message1 ">" (String.sub (Str.matched_string message) 1 ((String.length (Str.matched_string message)) - 1)) in
-                                                externalprint_pre (lines_from_files s) s message2 (print_line ((determine_no (search_context_stack_pre !contextStack))))                          
-                                        else
-                                            let message2 = Printf.sprintf "%s %s" message1 "> 0" in
-                                                externalprint_pre (lines_from_files s) s message2 (print_line ((determine_no (search_context_stack_pre !contextStack)))) 
-        
-    end
-        
-  (*End*)
-  
-
-  
-            
   let enummap = enummap1 @ enummap0
   
   let isfuncs = if file_type path=Java then [] else
@@ -2757,7 +1607,7 @@ let print_missingheap_precondition predname targs parameters h env=
     match ps with
       [PackageDecl(_,"",[],ds)] -> iter [] ds
     | _ when file_type path=Java -> []
-    
+
   let importmodulemap = importmodulemap1 @ importmodulemap0
 
   (* Region: type compatibility checker *)
@@ -2904,7 +1754,7 @@ let print_missingheap_precondition predname targs parameters h env=
           Some ([SwitchStmt (ls, e, cs) as body], _) ->
           let index = 
             match e with
-              Var (lx, x, _) ->
+              Var (lx, x) ->
               begin match try_assoc_i x pmap with
                 None -> static_error lx "Fixpoint function must switch on a parameter." None
               | Some (index, _) -> index
@@ -3708,12 +2558,11 @@ let print_missingheap_precondition predname targs parameters h env=
     if not (List.mem_assoc g funcmap) then static_error l "Must include header <math.h> when using floating-point operations." None;
     WFunCall (l, g, [], args)
   
-  let operation_expr funcmap l t operator arg1 arg2 ts =
+  let operation_expr funcmap l t operator arg1 arg2 =
     match t with
       Float|Double|LongDouble ->
-      let Some [t1; t2] = !ts in
-      floating_point_fun_call_expr funcmap l t (string_of_operator operator) [TypedExpr (arg1, t1); TypedExpr (arg2, t2)]
-    | _ -> Operation (l, operator, [arg1; arg2], ts)
+      floating_point_fun_call_expr funcmap l t (string_of_operator operator) [TypedExpr (arg1, t); TypedExpr (arg2, t)]
+    | _ -> WOperation (l, operator, [arg1; arg2], [t; t])
   
   let rec check_expr_core functypemap funcmap classmap interfmap (pn,ilist) tparams tenv (inAnnotation: bool option) e: (expr (* typechecked expression *) * type_ (* expression type *) * big_int option (* constant integer expression => value*)) =
     let check e = check_expr_core functypemap funcmap classmap interfmap (pn,ilist) tparams tenv inAnnotation e in
@@ -3759,33 +2608,27 @@ let print_missingheap_precondition predname targs parameters h env=
     (*
      * Docs: see "promote_checkdone"
      *)
-    let promote_numeric_checkdone e1 e2 ts check_e1 check_e2 =
+    let promote_numeric_checkdone e1 e2 check_e1 check_e2 =
       let (w1, t1, _) = check_e1 in
       let (w2, t2, _) = check_e2 in
       match (unfold_inferred_type t1, unfold_inferred_type t2) with
         (IntType, RealType) ->
         let w1 = checkt e1 RealType in
-        ts := Some [RealType; RealType];
         (w1, w2, RealType)
       | (RealType, IntType) ->
         let w2 = checkt e2 RealType in
-        ts := Some [RealType; RealType];
         (w1, w2, RealType)
       | ((UChar | UShortType | UintPtrType), (UChar | UShortType | UintPtrType)) ->
-        ts := Some [UintPtrType;UintPtrType];
         (w1, w2, UintPtrType)
       | ((Char|ShortType|IntType|UChar|UShortType), (Char|ShortType|IntType|UChar|UShortType)) ->
-        ts := Some [IntType; IntType];
         (w1, w2, IntType)
       | ((LongDouble, _)|(_, LongDouble)) ->
         let w1 = if t1 = LongDouble then w1 else checkt e1 LongDouble in
         let w2 = if t2 = LongDouble then w2 else checkt e2 LongDouble in
-        ts := Some [LongDouble; LongDouble];
         (w1, w2, LongDouble)
       | ((Double, _)|(_, Double)) ->
         let w1 = if t1 = Double then w1 else checkt e1 Double in
         let w2 = if t2 = Double then w2 else checkt e2 Double in
-        ts := Some [Double; Double];
         (w1, w2, Double)
       | ((Float, _)|(_, Float)) ->
         let w1 = if t1 = Float then w1 else checkt e1 Float in
@@ -3793,7 +2636,6 @@ let print_missingheap_precondition predname targs parameters h env=
         (w1, w2, Float)
       | (t1, t2) ->
         let w2 = checkt e2 t1 in
-        ts := Some [t1; t1];
         (w1, w2, t1)
     in
     (*
@@ -3806,16 +2648,16 @@ let print_missingheap_precondition predname targs parameters h env=
      * If you add support for promoting to unsigned int, be sure to
      * insert a cast to enable overflow/underflow-checking.
      *)
-    let promote_checkdone l e1 e2 ts check_e1 check_e2 =
-      match promote_numeric_checkdone e1 e2 ts check_e1 check_e2 with
+    let promote_checkdone l e1 e2 check_e1 check_e2 =
+      match promote_numeric_checkdone e1 e2 check_e1 check_e2 with
         (w1, w2, (Char | ShortType | IntType | RealType | UintPtrType | PtrType _ | UShortType | UChar | Float | Double | LongDouble)) as result -> result
       | _ -> static_error l "Expression of arithmetic or pointer type expected." None
     in
-    let promote_numeric e1 e2 ts =
-      promote_numeric_checkdone e1 e2 ts (check e1) (check e2)
+    let promote_numeric e1 e2 =
+      promote_numeric_checkdone e1 e2 (check e1) (check e2)
     in
-    let promote l e1 e2 ts =
-      promote_checkdone l e1 e2 ts (check e1) (check e2)
+    let promote l e1 e2 =
+      promote_checkdone l e1 e2 (check e1) (check e2)
     in
     let check_pure_fun_value_call l w t es =
       if es = [] then static_error l "Zero-argument application of pure function value makes no sense." None;
@@ -3836,11 +2678,11 @@ let print_missingheap_precondition predname targs parameters h env=
       True l -> (e, boolt, None)
     | False l -> (e, boolt, None)
     | Null l -> (e, ObjType "null", None)
-    | Var (l, x, scope) ->
+    | Var (l, x) ->
       begin
       match try_assoc x tenv with
-      | Some(RefType(t)) -> scope := Some LocalVar; (Deref(l, e, ref (Some t)), t, None)
-      | Some t -> scope := Some LocalVar; (e, t, None)
+      | Some(RefType(t)) -> (Deref(l, WVar (l, x, LocalVar), ref (Some t)), t, None)
+      | Some t -> (WVar (l, x, LocalVar), t, None)
       | None ->
       begin fun cont ->
       if language <> Java then cont () else
@@ -3858,7 +2700,7 @@ let print_missingheap_precondition predname targs parameters h env=
               else
                 None
             in
-            Some (WRead (l, Var (l, "this", ref (Some LocalVar)), fclass, x, ft, fbinding = Static, fvalue, fgh), ft, constant_value)
+            Some (WRead (l, WVar (l, "this", LocalVar), fclass, x, ft, fbinding = Static, fvalue, fgh), ft, constant_value)
           end
         | _ -> None
       in
@@ -3881,25 +2723,25 @@ let print_missingheap_precondition predname targs parameters h env=
               else
                 None
             in
-            Some (WRead (l, Var (l, current_class, ref (Some LocalVar)), fclass, x, ft, true, fvalue, fgh), ft, constant_value)
+            Some (WRead (l, WVar (l, current_class, LocalVar), fclass, x, ft, true, fvalue, fgh), ft, constant_value)
       in
       match field_of_class with
         Some result -> result
       | None ->
       match resolve Real (pn,ilist) l x classmap1 with
-        Some (cn, _) -> scope := Some ClassOrInterfaceNameScope; (e, ClassOrInterfaceName cn, None)
+        Some (cn, _) -> (WVar (l, x, ClassOrInterfaceNameScope), ClassOrInterfaceName cn, None)
       | None ->
       match resolve Real (pn,ilist) l x interfmap1 with
-        Some (cn, _) -> scope := Some ClassOrInterfaceNameScope; (e, ClassOrInterfaceName cn, None)
+        Some (cn, _) -> (WVar (l, x, ClassOrInterfaceNameScope), ClassOrInterfaceName cn, None)
       | None ->
       match resolve Real (pn,ilist) l x classmap0 with
-        Some (cn, _) -> scope := Some ClassOrInterfaceNameScope; (e, ClassOrInterfaceName cn, None)
+        Some (cn, _) -> (WVar (l, x, ClassOrInterfaceNameScope), ClassOrInterfaceName cn, None)
       | None ->
       match resolve Real (pn,ilist) l x interfmap0 with
-        Some (cn, _) -> scope := Some ClassOrInterfaceNameScope; (e, ClassOrInterfaceName cn, None)
+        Some (cn, _) -> (WVar (l, x, ClassOrInterfaceNameScope), ClassOrInterfaceName cn, None)
       | None ->
       if is_package x then begin
-        scope := Some PackageNameScope; (e, PackageName x, None)
+        (WVar (l, x, PackageNameScope), PackageName x, None)
       end else
         cont ()
       end $. fun () ->
@@ -3909,35 +2751,32 @@ let print_missingheap_precondition predname targs parameters h env=
         begin
           let targs = List.map (fun _ -> InferredType (object end, ref None)) tparams in
           let Some tpenv = zip tparams targs in
-          scope := Some PureCtor;
-          (Var (l, x, scope), instantiate_type tpenv t, None)
+          (WVar (l, x, PureCtor), instantiate_type tpenv t, None)
         end
         else
         begin
-          scope := Some PureCtor; (Var (l, x, scope), t, None)
+          (WVar (l, x, PureCtor), t, None)
         end
       | _ ->
       match try_assoc x all_funcnameterms with
         Some fterm when language = CLang ->
-        scope := Some FuncName; (e, PtrType Void, None)
+        (WVar (l, x, FuncName), PtrType Void, None)
       | None ->
       match resolve Ghost (pn,ilist) l x predfammap with
       | Some (x, (_, tparams, arity, ts, _, inputParamCount, inductiveness)) ->
         if arity <> 0 then static_error l "Using a predicate family as a value is not supported." None;
         if tparams <> [] then static_error l "Using a predicate with type parameters as a value is not supported." None;
-        scope := Some PredFamName;
-        (Var (l, x, scope), PredType (tparams, ts, inputParamCount, inductiveness), None)
+        (WVar (l, x, PredFamName), PredType (tparams, ts, inputParamCount, inductiveness), None)
       | None ->
       match try_assoc x enummap with
       | Some i ->
-        scope := Some (EnumElemName i);
-        (e, IntType, None)
+        (WVar (l, x, EnumElemName i), IntType, None)
       | None ->
       match try_assoc' Real (pn, ilist) x globalmap with
-      | Some ((l, tp, symbol, init)) -> scope := Some GlobalName; (e, tp, None)
+      | Some ((_, tp, symbol, init)) -> (WVar (l, x, GlobalName), tp, None)
       | None -> 
       match try_assoc x modulemap with
-      | Some _ when language <> Java -> scope := Some ModuleName; (e, IntType, None)
+      | Some _ when language <> Java -> (WVar (l, x, ModuleName), IntType, None)
       | _ ->
       match resolve Ghost (pn,ilist) l x purefuncmap with
         Some (x, (_, tparams, t, param_names_types, _)) ->
@@ -3949,7 +2788,7 @@ let print_missingheap_precondition predname targs parameters h env=
             let tpenv = List.map (fun x -> (x, InferredType (object end, ref None))) tparams in
             (List.map (instantiate_type tpenv) pts, instantiate_type tpenv t)
         in
-        scope := Some PureFuncName; (Var (l, x, scope), List.fold_right (fun t1 t2 -> PureFuncType (t1, t2)) pts t, None)
+        (WVar (l, x, PureFuncName), List.fold_right (fun t1 t2 -> PureFuncType (t1, t2)) pts t, None)
       | None ->
       if language = Java then
         static_error l ("No such variable, field, class, interface, package, inductive datatype constructor, or predicate: " ^ x) None
@@ -3965,57 +2804,55 @@ let print_missingheap_precondition predname targs parameters h env=
           (PredNameExpr (l, g), PredType (tparams, ts, inputParamCount, inductiveness), None)
         | None -> static_error l "No such predicate." None
       end
-    | Operation (l, (Eq | Neq as operator), [e1; e2], ts) -> 
-      let (w1, w2, t) = promote_numeric e1 e2 ts in
-      (operation_expr funcmap l t operator w1 w2 ts, boolt, None)
-    | Operation (l, (Or | And as operator), [e1; e2], ts) -> 
+    | Operation (l, (Eq | Neq as operator), [e1; e2]) -> 
+      let (w1, w2, t) = promote_numeric e1 e2 in
+      (operation_expr funcmap l t operator w1 w2, boolt, None)
+    | Operation (l, (Or | And as operator), [e1; e2]) -> 
       let w1 = checkcon e1 in
       let w2 = checkcon e2 in
-      (Operation (l, operator, [w1; w2], ts), boolt, None)
-    | Operation (l, Not, [e], ts) -> 
+      (WOperation (l, operator, [w1; w2], [boolt; boolt]), boolt, None)
+    | Operation (l, Not, [e]) -> 
       let w = checkcon e in
-      (Operation (l, Not, [w], ts), boolt, None)
-    | Operation (l, BitAnd, [e1; e2], ts) ->
+      (WOperation (l, Not, [w], [boolt]), boolt, None)
+    | Operation (l, BitAnd, [e1; e2]) ->
       let (w1, t1, _) = check e1 in
       let (w2, t2, _) = check e2 in
       begin match (t1, t2) with
-        ((Char|ShortType|IntType|UintPtrType), (Char|ShortType|IntType|UintPtrType)) ->
+        ((Char|UChar|ShortType|UShortType|IntType|UintPtrType), (Char|UChar|ShortType|UShortType|IntType|UintPtrType)) ->
         let t = match (t1, t2) with (UintPtrType, _) | (_, UintPtrType) -> UintPtrType | _ -> IntType in
-        ts := Some [t1; t2];
-        (Operation (l, BitAnd, [w1; w2], ts), t, None)
+        (WOperation (l, BitAnd, [w1; w2], [t1; t2]), t, None)
       | _ -> static_error l "Arguments to bitwise operators must be integral types." None
       end
-    | Operation (l, (BitXor | BitOr as operator), [e1; e2], ts) ->
+    | Operation (l, (BitXor | BitOr as operator), [e1; e2]) ->
       let (w1, t1, _) = check e1 in
       let (_, t2, _) = check e2 in
       begin
       match t1 with
-        (Char | ShortType | IntType) -> let w2 = checkt e2 IntType in ts := Some [t1;t2]; (Operation (l, operator, [w1; w2], ts), IntType, None)
-      | UintPtrType -> let w2 = checkt e2 UintPtrType in (Operation (l, operator, [w1; w2], ts), UintPtrType, None)
+        (Char|UChar|ShortType|UShortType|IntType) -> let w2 = checkt e2 IntType in (WOperation (l, operator, [w1; w2], [t1; t2]), IntType, None)
+      | UintPtrType -> let w2 = checkt e2 UintPtrType in (WOperation (l, operator, [w1; w2], [UintPtrType; UintPtrType]), UintPtrType, None)
       | _ -> static_error l "Arguments to bitwise operators must be integral types." None
       end
-    | Operation (l, Mod, [e1; e2], ts) ->
+    | Operation (l, Mod, [e1; e2]) ->
       let (w1, t1, _) = check e1 in
       let (_, t2, _) = check e2 in
       begin
       match t1 with
-        (Char | ShortType | IntType) -> let w2 = checkt e2 IntType in ts :=
-Some [t1;t2]; (Operation (l, Mod, [w1; w2], ts), IntType, None)
-      | (UChar | UShortType | UintPtrType) -> let w2 = checkt e2 UintPtrType in (Operation (l, Mod, [w1; w2], ts), UintPtrType, None)
+        (Char | ShortType | IntType) -> let w2 = checkt e2 IntType in (WOperation (l, Mod, [w1; w2], [t1; t2]), IntType, None)
+      | (UChar | UShortType | UintPtrType) -> let w2 = checkt e2 UintPtrType in (WOperation (l, Mod, [w1; w2], [UintPtrType; UintPtrType]), UintPtrType, None)
       | _ -> static_error l "Arguments to modulus operator must be integral types." None
       end
-    | Operation (l, BitNot, [e], ts) ->
+    | Operation (l, BitNot, [e]) ->
       let (w, t, _) = check e in
       begin
       match t with
-        Char | ShortType | IntType -> ts := Some [IntType]; (Operation (l, BitNot, [w], ts), IntType, None)
-      | UintPtrType -> ts := Some [UintPtrType]; (Operation (l, BitNot, [w], ts), UintPtrType, None)
+        Char | ShortType | IntType -> (WOperation (l, BitNot, [w], [IntType]), IntType, None)
+      | UintPtrType -> (WOperation (l, BitNot, [w], [UintPtrType]), UintPtrType, None)
       | _ -> static_error l "argument to ~ must be char, short, int or uintptr" None
       end
-    | Operation (l, (Le | Lt | Ge | Gt as operator), [e1; e2], ts) -> 
-      let (w1, w2, t) = promote l e1 e2 ts in
-      (operation_expr funcmap l t operator w1 w2 ts, boolt, None)
-    | Operation (l, (Add | Sub as operator), [e1; e2], ts) ->
+    | Operation (l, (Le | Lt | Ge | Gt as operator), [e1; e2]) -> 
+      let (w1, w2, t) = promote l e1 e2 in
+      (operation_expr funcmap l t operator w1 w2, boolt, None)
+    | Operation (l, (Add | Sub as operator), [e1; e2]) ->
       let (w1, t1, value1) = check e1 in
       let (w2, t2, value2) = check e2 in
       let t1 = unfold_inferred_type t1 in
@@ -4025,14 +2862,12 @@ Some [t1;t2]; (Operation (l, Mod, [w1; w2], ts), IntType, None)
           PtrType pt1, PtrType pt2 when operator = Sub ->
             if pt1 <> pt2 then static_error l "Pointers must be of same type" None;
             if pt1 <> Char && pt1 <> Void then static_error l "Subtracting non-char pointers is not yet supported" None;
-            ts:=Some [t1; t2];
-            (Operation (l, operator, [w1; w2], ts), IntType, None)
+            (WOperation (l, operator, [w1; w2], [t1; t2]), IntType, None)
         | PtrType pt1, _ ->
             let w2 = checkt e2 intt in
-            ts:=Some [t1; IntType];
-            (Operation (l, operator, [w1; w2], ts), t1, None)
+            (WOperation (l, operator, [w1; w2], [t1; IntType]), t1, None)
         | t1, t2 when is_arithmetic_type t1 && is_arithmetic_type t2 ->
-          let (w1, w2, t) = promote_checkdone l e1 e2 ts (w1, t1, value1) (w2, t2, value2) in
+          let (w1, w2, t) = promote_checkdone l e1 e2 (w1, t1, value1) (w2, t2, value2) in
           let value =
             if t = IntType then
               match (value1, value2, operator) with
@@ -4042,22 +2877,20 @@ Some [t1;t2]; (Operation (l, Mod, [w1; w2], ts), IntType, None)
             else
               None
           in
-          (operation_expr funcmap l t operator w1 w2 ts, t, value)
+          (operation_expr funcmap l t operator w1 w2, t, value)
         | (ObjType "java.lang.String" as t, _) when operator = Add ->
           let w2 = checkt e2 t in
-          ts:=Some [t1; ObjType "java.lang.String"];
-          (Operation (l, operator, [w1; w2], ts), t1, None)
+          (WOperation (l, operator, [w1; w2], [t1; ObjType "java.lang.String"]), t1, None)
         | _ -> static_error l ("Operand of addition or subtraction must be pointer, integer, char, short, or real number: t1 "^(string_of_type t1)^" t2 "^(string_of_type t2)) None
       end
-    | Operation (l, (Mul|Div as operator), [e1; e2], ts) ->
-      let (w1, w2, t) = promote l e1 e2 ts in
+    | Operation (l, (Mul|Div as operator), [e1; e2]) ->
+      let (w1, w2, t) = promote l e1 e2 in
       begin match t with PtrType _ -> static_error l "Operands should be arithmetic expressions, not pointer expressions" None | _ -> () end;
-      (operation_expr funcmap l t operator w1 w2 ts, t, None)
-    | Operation (l, (ShiftLeft | ShiftRight as op), [e1; e2], ts) ->
+      (operation_expr funcmap l t operator w1 w2, t, None)
+    | Operation (l, (ShiftLeft | ShiftRight as op), [e1; e2]) ->
       let w1 = checkt e1 IntType in
       let w2 = checkt e2 IntType in
-      ts := Some [IntType; IntType];
-      (Operation (l, op, [w1; w2], ts), IntType, None)
+      (WOperation (l, op, [w1; w2], [IntType; IntType]), IntType, None)
     | IntLit (l, n, t) -> (e, (match !t with None -> t := Some intt; intt | Some t -> t), Some n)
     | RealLit(l, n) ->
       if inAnnotation = Some true then
@@ -4085,8 +2918,13 @@ Some [t1;t2]; (Operation (l, Mod, [w1; w2], ts), IntType, None)
           PtrType t0 -> tr := Some t0; (Deref (l, w, tr), t0, None)
         | _ -> static_error l "Operand must be pointer." None
       end
-    | AddressOf (l, Var(l2, x, scope)) when List.mem_assoc x tenv ->
-      scope := Some(LocalVar); (Var(l2, x, scope), PtrType(match List.assoc x tenv with RefType(t) -> t | _ -> static_error l "Taking the address of this expression is not supported." None), None)
+    | AddressOf (l, Var(l2, x)) when List.mem_assoc x tenv ->
+      let pointeeType =
+        match List.assoc x tenv with
+          RefType(t) -> t
+        | _ -> static_error l "Taking the address of this expression is not supported." None
+      in
+      (WVar (l2, x, LocalVar), PtrType pointeeType, None)
     | AddressOf (l, e) -> let (w, t, _) = check e in (AddressOf (l, w), PtrType t, None)
     | CallExpr (l, "getClass", [], [], [LitPat target], Instance) when language = Java ->
       let w = checkt target (ObjType "java.lang.Object") in
@@ -4127,7 +2965,7 @@ Some [t1;t2]; (Operation (l, Mod, [w1; w2], ts), IntType, None)
           (WFunPtrCall (l, g, es), rt, None)
         | Some ((PureFuncType (t1, t2) as t)) ->
           if targes <> [] then static_error l "Pure function value does not have type parameters." None;
-          check_pure_fun_value_call l (Var (l, g, ref (Some LocalVar))) t es
+          check_pure_fun_value_call l (WVar (l, g, LocalVar)) t es
         | _ ->
         match (g, es) with
           ("malloc", [SizeofExpr (ls, StructTypeExpr (lt, tn))]) ->
@@ -4186,7 +3024,7 @@ Some [t1;t2]; (Operation (l, Mod, [w1; w2], ts), IntType, None)
         begin fun on_fail ->
           match try_assoc "this" tenv with
             Some (ObjType cn) ->
-            try_qualified_call cn (Var (l, "this", ref (Some LocalVar))::es) es Instance on_fail
+            try_qualified_call cn (Var (l, "this")::es) es Instance on_fail
           | _ ->
           match try_assoc current_class tenv with
             Some (ClassOrInterfaceName tn) ->
@@ -4329,7 +3167,7 @@ Some [t1;t2]; (Operation (l, Mod, [w1; w2], ts), IntType, None)
           end
         | None -> None
       in
-      let args_checked = List.map (fun a -> let (w, tp, _) = check a in (w, tp)) args in 
+      let args_checked = List.map (fun a -> let (w, tp, _) = check a in (TypedExpr (w, tp), tp)) args in 
       let argtps = List.map snd args_checked in
       let wargs = List.map fst args_checked in
       let thistype = try_assoc "this" tenv in
@@ -4341,8 +3179,9 @@ Some [t1;t2]; (Operation (l, Mod, [w1; w2], ts), IntType, None)
         | Some {csuper} ->
             begin match get_implemented_instance_method csuper mn argtps with
               None -> static_error l "No matching method." None
-            | Some(((mn', sign), (lm, gh, rt, xmap, pre, pre_tenv, post, epost, pre_dyn, post_dyn, epost_dyn, ss, fb, v, is_override, abstract))) -> 
-             (WSuperMethodCall(l, mn, (Var (l, "this", ref (Some LocalVar))) :: wargs, (lm, gh, rt, xmap, pre, post, epost, v)), (match rt with Some(tp) -> tp | _ -> Void), None)
+            | Some(((mn', sign), (lm, gh, rt, xmap, pre, pre_tenv, post, epost, pre_dyn, post_dyn, epost_dyn, ss, fb, v, is_override, abstract))) ->
+              let tp = match rt with Some(tp) -> tp | _ -> Void in
+              (WSuperMethodCall (l, mn, Var (l, "this") :: wargs, (lm, gh, rt, xmap, pre, post, epost, v)), tp, None)
             end
         end
       end 
@@ -4369,7 +3208,8 @@ Some [t1;t2]; (Operation (l, Mod, [w1; w2], ts), IntType, None)
             (AssignOpExpr(l, w1, operator, w2, postOp, ts, lhs_type), t1, None)
           end
         | IntType | RealType | ShortType | Char ->
-          let (w1, w2, t) = promote_checkdone l e1 e2 ts (w1, t1, value1) (w2, t2, value2) in
+          let (w1, w2, t) = promote_checkdone l e1 e2 (w1, t1, value1) (w2, t2, value2) in
+          ts := Some [t; t];
           (AssignOpExpr(l, w1, operator, w2, postOp, ts, lhs_type), t1, None)
         | ObjType "java.lang.String" as t when operator = Add ->
           let w2 = checkt e2 t in
@@ -4407,7 +3247,7 @@ Some [t1;t2]; (Operation (l, Mod, [w1; w2], ts), IntType, None)
     check_expr_t_core_core functypemap funcmap classmap interfmap (pn, ilist) tparams tenv inAnnotation e t0 false
   and check_expr_t_core_core functypemap funcmap classmap interfmap (pn,ilist) tparams tenv (inAnnotation: bool option) e t0 isCast =
     match (e, unfold_inferred_type t0) with
-      (Operation(l, Div, [IntLit(_, i1, _); IntLit(_, i2, _)], _), RealType) -> RealLit(l, (num_of_big_int i1) // (num_of_big_int i2))
+      (Operation(l, Div, [IntLit(_, i1, _); IntLit(_, i2, _)]), RealType) -> RealLit(l, (num_of_big_int i1) // (num_of_big_int i2))
     | (IntLit (l, n, t), PtrType _) when isCast || eq_big_int n zero_big_int -> t:=Some t0; e
     | (IntLit (l, n, t), RealType) -> t:=Some RealType; e
     | (IntLit (l, n, t), UChar) ->
@@ -4496,7 +3336,7 @@ Some [t1;t2]; (Operation (l, Mod, [w1; w2], ts), IntType, None)
     match t with
       Bool -> w
     | Char | UChar | ShortType | UShortType | IntType | UintPtrType | PtrType _ when language = CLang ->
-      Operation(expr_loc e, Neq, [w; IntLit(expr_loc e, big_int_of_int 0, ref (Some t))], ref (Some [t;t]))
+      WOperation (expr_loc e, Neq, [w; IntLit(expr_loc e, big_int_of_int 0, ref (Some t))], [t; t])
     | _ -> expect_type (expr_loc e) inAnnotation t Bool; w
   and check_deref_core functypemap funcmap classmap interfmap (pn,ilist) l tparams tenv e f =
     let (w, t, _) = check_expr_core functypemap funcmap classmap interfmap (pn,ilist) tparams tenv None e in
@@ -4590,7 +3430,7 @@ Some [t1;t2]; (Operation (l, Mod, [w1; w2], ts), IntType, None)
         [] -> List.rev fpm_done
       | (g, (l, tparams, rt, pmap, index, body, pn, ilist, fsym))::fpm_todo ->
       match (index, body) with
-        (Some index, SwitchStmt (ls, Var (lx, x, _), cs)) ->
+        (Some index, SwitchStmt (ls, Var (lx, x), cs)) ->
         let (i, targs) =
           match List.assoc x pmap with
             InductiveType (i, targs) -> (i, targs)
@@ -4611,9 +3451,9 @@ Some [t1;t2]; (Operation (l, Mod, [w1; w2], ts), IntType, None)
             let (cn, xs) =
               match e with
                 CallExpr (_, cn, _, _, pats, _) ->
-                let xs = List.map (function LitPat (Var (_, x, _)) -> x | _ -> static_error lc "Constructor arguments must be variable names" None) pats in
+                let xs = List.map (function LitPat (Var (_, x)) -> x | _ -> static_error lc "Constructor arguments must be variable names" None) pats in
                 (cn, xs)
-              | Var (_, cn, _) -> (cn, [])
+              | Var (_, cn) -> (cn, [])
               | _ -> static_error lc "Case expression must be constructor pattern" None
             in
             let ts =
@@ -4651,14 +3491,14 @@ Some [t1;t2]; (Operation (l, Mod, [w1; w2], ts), IntType, None)
                   if List.mem_assoc g' fpm_todo then static_error l "A fixpoint function cannot call a fixpoint function that appears later in the program text" None;
                   if g' = g then begin
                     match List.nth args index with
-                      Var (l, x, _) when List.mem x components -> ()
+                      WVar (l, x, LocalVar) when List.mem x components -> ()
                     | _ -> static_error l "Inductive argument of recursive call must be switch clause pattern variable." None
                   end;
                   List.iter iter1 args
-                | Var (l, g', scope) when (match !scope with Some PureFuncName -> true | _ -> false) ->
+                | WVar (l, g', PureFuncName) ->
                   if List.mem_assoc g' fpm_todo then static_error l "A fixpoint function cannot mention a fixpoint function that appears later in the program text" None;
                   if g' = g then static_error l "A fixpoint function that mentions itself is not yet supported." None
-                | SwitchExpr (l, Var (_, x, _), cs, def_opt, _) when List.mem x components ->
+                | SwitchExpr (l, WVar (_, x, LocalVar), cs, def_opt, _) when List.mem x components ->
                   List.iter (fun (SwitchExprClause (_, _, pats, e)) -> iter0 (pats @ components) e) cs;
                   (match def_opt with None -> () | Some (l, e) -> iter1 e)
                 | _ -> expr_fold_open iter () e
@@ -4680,7 +3520,7 @@ Some [t1;t2]; (Operation (l, Mod, [w1; w2], ts), IntType, None)
                 WPureFunCall (l, g', targs, args) ->
                 if List.mem_assoc g' fpm_todo then static_error l "A fixpoint function cannot call a fixpoint function that appears later in the program text" None;
                 if g' = g then static_error l "Recursive calls are not allowed in a default clause." None
-              | Var (l, g', scope) when (match !scope with Some PureFuncName -> true | _ -> false) ->
+              | WVar (l, g', PureFuncName) ->
                 if List.mem_assoc g' fpm_todo then static_error l "A fixpoint function cannot mention a fixpoint function that appears later in the program text" None;
                 if g' = g then static_error l "A fixpoint function that mentions itself is not yet supported." None
               | _ -> ()
@@ -4694,7 +3534,7 @@ Some [t1;t2]; (Operation (l, Mod, [w1; w2], ts), IntType, None)
             clauses @ wcs
         in
         let wcs = check_cs ctormap [] cs in
-        iter ((g, (l, rt, pmap, Some index, SwitchExpr (ls, Var (lx, x, ref None), wcs, None, ref None), pn, ilist, fsym))::fpm_done) fpm_todo
+        iter ((g, (l, rt, pmap, Some index, SwitchExpr (ls, Var (lx, x), wcs, None, ref None), pn, ilist, fsym))::fpm_done) fpm_todo
       | (None, ReturnStmt (lr, Some e)) ->
         let tenv = pmap in
         let w = check_expr_t (pn,ilist) tparams tenv (Some true) e rt in
@@ -4706,7 +3546,7 @@ Some [t1;t2]; (Operation (l, Mod, [w1; w2], ts), IntType, None)
               if List.mem_assoc g' fpm_todo then static_error l "A fixpoint function cannot call a fixpoint function that appears later in the program text" None;
               if g' = g then static_error l "A fixpoint function whose body is a return statement cannot call itself." None;
               List.iter iter1 args
-            | Var (l, g', scope) when (match !scope with Some PureFuncName -> true | _ -> false) ->
+            | WVar (l, g', PureFuncName) ->
               if List.mem_assoc g' fpm_todo then static_error l "A fixpoint function cannot mention a fixpoint function that appears later in the program text" None;
               if g' = g then static_error l "A fixpoint function whose body is a return statement cannot mention itself." None
             | _ -> expr_fold_open iter () e
@@ -4722,8 +3562,8 @@ Some [t1;t2]; (Operation (l, Mod, [w1; w2], ts), IntType, None)
   let check_static_field_initializer e =
     let rec iter e =
       match e with
-        True _ | False _ | Null _ | Var _ | IntLit _ | RealLit _ | StringLit _ | ClassLit _ -> ()
-      | Operation (l, _, es, _) -> List.iter iter es
+        True _ | False _ | Null _ | WVar _ | IntLit _ | RealLit _ | StringLit _ | ClassLit _ -> ()
+      | WOperation (l, _, es, _) -> List.iter iter es
       | NewArray (l, t, e) -> iter e
       | NewArrayWithInitializer (l, t, es) -> List.iter iter es
       | CastExpr (l, _, _, e) -> iter e
@@ -4811,19 +3651,19 @@ Some [t1;t2]; (Operation (l, Mod, [w1; w2], ts), IntType, None)
         True l -> BoolConst true
       | False l -> BoolConst false
       | Null l -> NullConst
-      | Operation (l, Add, [e1; e2], _) ->
+      | WOperation (l, Add, [e1; e2], _) ->
         begin match (ev e1, ev e2) with
           (IntConst n1, IntConst n2) -> IntConst (add_big_int n1 n2)
         | (StringConst s1, v) -> StringConst (s1 ^ string_of_const v)
         | (v, StringConst s2) -> StringConst (string_of_const v ^ s2)
         | _ -> raise NotAConstant
         end
-      | Operation (l, Sub, [e1; e2], _) ->
+      | WOperation (l, Sub, [e1; e2], _) ->
         begin match (ev e1, ev e2) with
           (IntConst n1, IntConst n2) -> IntConst (sub_big_int n1 n2)
         | _ -> raise NotAConstant
         end
-      | Operation (l, Mul, [e1; e2], _) ->
+      | WOperation (l, Mul, [e1; e2], _) ->
         begin match (ev e1, ev e2) with
           (IntConst n1, IntConst n2) -> IntConst (mult_big_int n1 n2)
         | _ -> raise NotAConstant
@@ -4965,7 +3805,7 @@ Some [t1;t2]; (Operation (l, Mod, [w1; w2], ts), IntType, None)
     | (_, []) -> static_error l "Too few patterns" None
   
   let get_class_of_this =
-    WMethodCall (dummy_loc, "java.lang.Object", "getClass", [], [Var (dummy_loc, "this", ref (Some LocalVar))], Instance)
+    WMethodCall (dummy_loc, "java.lang.Object", "getClass", [], [WVar (dummy_loc, "this", LocalVar)], Instance)
   
   let get_class_finality tn = (* Returns ExtensibleClass if tn is an interface *)
     match try_assoc tn classmap1 with
@@ -5107,8 +3947,8 @@ Some [t1;t2]; (Operation (l, Mod, [w1; w2], ts), IntType, None)
             None, Some wend -> warray, wend
           | Some (LitPat (IntLit (_, n, _))), Some wend when eq_big_int n zero_big_int -> warray, wend
           | Some (LitPat wstart), Some (LitPat wend) ->
-            Operation (lslice, Add, [warray; wstart], ref (Some [PtrType elemtype; IntType])),
-            LitPat (Operation (lslice, Sub, [wend; wstart], ref (Some [IntType; IntType])))
+            WOperation (lslice, Add, [warray; wstart], [PtrType elemtype; IntType]),
+            LitPat (WOperation (lslice, Sub, [wend; wstart], [IntType; IntType]))
           | _ -> static_error l "Malformed array assertion." None
         in
         (WPredAsn (l, p, true, [], [], [LitPat wfirst; wlength; wrhs]), tenv, [])
@@ -5130,7 +3970,7 @@ Some [t1;t2]; (Operation (l, Mod, [w1; w2], ts), IntType, None)
       let (wlhs, t) = check_expr (pn,ilist) tparams tenv (Some true) lhs in
       begin match wlhs with
         WRead (_, _, _, _, _, _, _, _) | WReadArray (_, _, _, _) -> ()
-      | Var (_, _, scope) when !scope = Some GlobalName -> ()
+      | WVar (_, _, GlobalName) -> ()
       | Deref (_, _, _) -> ()
       | _ -> static_error l "The left-hand side of a points-to assertion must be a field dereference, a global variable, a pointer variable dereference or an array element expression." None
       end;
@@ -5388,7 +4228,7 @@ Some [t1;t2]; (Operation (l, Mod, [w1; w2], ts), IntType, None)
   let rec vars_used e =
     let rec iter state e =
       match e with
-      | Var (l, x, scope) -> begin match !scope with Some LocalVar -> x::state | Some _ -> state end
+      | WVar (l, x, scope) -> begin match scope with LocalVar -> x::state | _ -> state end
       | SwitchExpr (l, e, cs, cdef_opt, _) ->
         vars_used e @
         flatmap
@@ -5412,7 +4252,7 @@ Some [t1;t2]; (Operation (l, Mod, [w1; w2], ts), IntType, None)
   
   let rec fixed_pat_fixed_vars pat =
     match pat with
-      LitPat (Var (_, x, scope)) when !scope = Some LocalVar -> [x]
+      LitPat (WVar (_, x, LocalVar)) -> [x]
     | LitPat _ -> []
     | VarPat (_, x) -> [x]
     | DummyPat -> []
@@ -5438,7 +4278,7 @@ Some [t1;t2]; (Operation (l, Mod, [w1; w2], ts), IntType, None)
       begin match lhs with
         WRead (lr, et, _, _, _, _, _, _) -> assert_expr_fixed fixed et
       | WReadArray (la, ea, tp, ei) -> assert_expr_fixed fixed ea; assert_expr_fixed fixed ei
-      | Var (_, _, scope) when !scope = Some GlobalName -> ()
+      | WVar (_, _, GlobalName) -> ()
       end;
       assume_pat_fixed fixed pv
     | WPredAsn (l, g, is_global_predref, targs, pats0, pats) ->
@@ -5455,7 +4295,7 @@ Some [t1;t2]; (Operation (l, Mod, [w1; w2], ts), IntType, None)
       begin match e_opt with None -> () | Some e -> assert_expr_fixed fixed e end;
       assert_expr_fixed fixed index;
       assume_pats_fixed fixed pats
-    | ExprAsn (l, Operation (_, Eq, [Var (_, x, scope); e2], _)) when !scope = Some LocalVar ->
+    | ExprAsn (l, WOperation (_, Eq, [WVar (_, x, LocalVar); e2], _)) ->
       if not (List.mem x fixed) && expr_is_fixed fixed e2 then
         x::fixed
       else
@@ -5512,8 +4352,8 @@ Some [t1;t2]; (Operation (l, Mod, [w1; w2], ts), IntType, None)
                   p#set_inputParamCount (Some 1);
                   ((g, []),
                    ([], l, [], [sn, PtrType (StructType sn); "value", t], symb, Some 1,
-                    let r = WRead (l, Var (l, sn, ref (Some LocalVar)), sn, f, t, false, ref (Some None), Real) in
-                    WPredAsn (l, p, true, [], [], [LitPat (AddressOf (l, r)); LitPat (Var (l, "value", ref (Some LocalVar)))])
+                    let r = WRead (l, WVar (l, sn, LocalVar), sn, f, t, false, ref (Some None), Real) in
+                    WPredAsn (l, p, true, [], [], [LitPat (AddressOf (l, r)); LitPat (WVar (l, "value", LocalVar))])
                    )
                   )
                 in
@@ -5676,7 +4516,7 @@ Some [t1;t2]; (Operation (l, Mod, [w1; w2], ts), IntType, None)
   let check_ghost ghostenv l e =
     expr_iter
       begin function
-        Var (l, x, _) -> if List.mem x ghostenv then static_error l "Cannot read a ghost variable in a non-pure context." None
+        Var (l, x) -> if List.mem x ghostenv then static_error l "Cannot read a ghost variable in a non-pure context." None
       | _ -> ()
       end
       e
@@ -6332,11 +5172,9 @@ let check_if_list_is_defined () =
       True l -> cont state ctxt#mk_true
     | False l -> cont state ctxt#mk_false
     | Null l -> cont state (ctxt#mk_intlit 0)
-    | Var (l, x, scope) ->
+    | WVar (l, x, scope) ->
       cont state
       begin
-        if !scope = None then print_endline (string_of_loc l);
-        let (Some scope) = !scope in
         match scope with
           LocalVar -> (try List.assoc x env with Not_found -> assert_false [] env l (Printf.sprintf "Unbound variable '%s'" x) None)
         | PureCtor -> let Some (lg, tparams, t, [], s) = try_assoc x purefuncmap in mk_app s []
@@ -6366,18 +5204,10 @@ let check_if_list_is_defined () =
           if ass_term <> None && not (le_big_int zero_big_int n &&
 le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out of range." None;
           cont state (ctxt#mk_intlit_of_string (string_of_big_int n))
-        | (e, Char, false) ->
+        | (e, (Char|UChar|ShortType|UShortType|IntType|UintPtrType as tp), false) ->
           ev state e $. fun state t ->
-          cont state (check_overflow l min_char_term t max_char_term)
-        | (e, ShortType, false) ->
-          ev state e $. fun state t ->
-          cont state (check_overflow l min_short_term t max_short_term)
-        | (e, IntType, false) ->
-          ev state e $. fun state t ->
-          cont state (check_overflow l min_int_term t max_int_term)
-        | (e, UintPtrType, false) ->
-          ev state e $. fun state t ->
-          cont state (check_overflow l min_uint_term t max_uint_term)
+          let min, max = limits_of_type tp in
+          cont state (check_overflow l min t max)
         | (e, Char, true) ->
           ev state e $. fun state t ->
           cont state (ctxt#mk_app truncate_int8_symbol [t])
@@ -6476,19 +5306,19 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
     | IfExpr (l, e1, e2, e3) ->
       evs state [e1; e2; e3] $. fun state [v1; v2; v3] ->
       cont state (ctxt#mk_ifthenelse v1 v2 v3) (* Only sound if e2 and e3 are side-effect-free *)
-    | Operation (l, BitAnd, [e1; Operation (_, BitNot, [e2], ts2)], ts1) ->
+    | WOperation (l, BitAnd, [e1; WOperation (_, BitNot, [e2], ts2)], ts1) ->
       ev state e1 $. fun state v1 -> ev state e2 $. fun state v2 ->
       cont state (ctxt#mk_app bitwise_and_symbol [v1; ctxt#mk_app bitwise_not_symbol [v2]])
-    | Operation (l, Not, [e], ts) -> ev state e $. fun state v -> cont state (ctxt#mk_not v)
-    | Operation (l, BitNot, [e], ts) ->
-      begin match !ts with
-        Some [IntType] -> ev state e $. fun state v -> cont state (ctxt#mk_app bitwise_not_symbol [v])
+    | WOperation (l, Not, [e], ts) -> ev state e $. fun state v -> cont state (ctxt#mk_not v)
+    | WOperation (l, BitNot, [e], ts) ->
+      begin match ts with
+        [IntType] -> ev state e $. fun state v -> cont state (ctxt#mk_app bitwise_not_symbol [v])
       | _ ->
         static_error l "VeriFast does not currently support taking the bitwise complement (~) of an unsigned integer except as part of a bitwise AND (x & ~y)." None
       end
-    | Operation (l, Div, [e1; e2], ts) ->
-      begin match ! ts with
-        Some ([RealType; RealType]) ->
+    | WOperation (l, Div, [e1; e2], ts) ->
+      begin match ts with
+        [RealType; RealType] ->
         begin match (e1, e2) with
           (RealLit (_, n), IntLit (_, d, _)) when eq_num n (num_of_big_int unit_big_int) && eq_big_int d two_big_int -> cont state real_half
         | (IntLit (_, n, _), IntLit (_, d, _)) when eq_big_int n unit_big_int && eq_big_int d two_big_int -> cont state real_half
@@ -6501,7 +5331,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
           in
           ev state e1 $. fun state v1 -> cont state (ctxt#mk_real_mul v1 (ctxt#mk_reallit_of_num (div_num (num_of_int 1) (eval_reallit e2)))) 
         end
-      | Some ([IntType; IntType]) -> 
+      | [IntType; IntType] -> 
         ev state e1 $. fun state v1 -> ev state e2 $. fun state v2 -> 
         begin match ass_term with
           Some assert_term -> assert_term l (ctxt#mk_not (ctxt#mk_eq v2 (ctxt#mk_intlit 0))) "Denominator might be 0." None
@@ -6509,7 +5339,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
         end;
         cont state (ctxt#mk_div v1 v2)
       end
-    | Operation (l, BitAnd, [e1; IntLit(_, i, _)], ts) when le_big_int zero_big_int i && ass_term <> None -> (* optimization *)
+    | WOperation (l, BitAnd, [e1; IntLit(_, i, _)], ts) when le_big_int zero_big_int i && ass_term <> None -> (* optimization *)
       ev state e1 $. fun state v1 ->
         let iterm = ctxt#mk_intlit (int_of_big_int i) in
         let app = ctxt#mk_app bitwise_and_symbol [v1;iterm] in
@@ -6518,8 +5348,8 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
           ignore (ctxt#assume (ctxt#mk_eq (ctxt#mk_mod v1 (ctxt#mk_intlit 2)) app));
         end;
         cont state app
-    | Operation (l, op, ([e1; e2] as es), ts) ->
-      evs state es $. fun state [v1; v2] -> cont state (eval_op l op v1 v2 !ts ass_term) 
+    | WOperation (l, op, ([e1; e2] as es), ts) ->
+      evs state es $. fun state [v1; v2] -> cont state (eval_op l op v1 v2 (Some ts) ass_term) 
     | ArrayLengthExpr (l, e) ->
       ev state e $. fun state t ->
       begin match ass_term with
@@ -6580,12 +5410,12 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
           (* GCC documentation is not clear about it. *)
           ev state e $. fun state v ->
           cont state (field_address l v fparent fname)
-        | Var (l, x, scope) when !scope = Some GlobalName ->
+        | WVar (l, x, GlobalName) ->
           let Some (l, tp, symbol, init) = try_assoc x globalmap in cont state symbol
         (* The address of a function symbol is commonly used in the
            assignment of function pointers. We tread (&function) in the
            same way as (function), which is what most compilers do: *)
-        | Var (l, x, scope) when !scope = Some FuncName ->
+        | WVar (l, x, FuncName) ->
             cont state (List.assoc x all_funcnameterms)
         | _ -> static_error l "Taking the address of this expression is not supported." None
       end
@@ -6661,7 +5491,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
   let _ =
     List.iter
     begin function
-       (g, (l, t, pmap, Some index, SwitchExpr (_, Var (_, x, _), cs, _, _), pn, ilist, fsym)) ->
+       (g, (l, t, pmap, Some index, SwitchExpr (_, Var (_, x), cs, _, _), pn, ilist, fsym)) ->
        let rec index_of_param i x0 ps =
          match ps with
            [] -> assert false
@@ -6714,13 +5544,3 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
   end
 
 end
-let simpletry = ()
-(*open CheckFile1
-
- module emptymodule = struct
-
-include CheckFile1
-
-let simpletry = (kfprintf (fun _ -> flush stdout) stdout "String %s" "Click"); (kfprintf (fun _ -> flush stdout) stdout "String %s" "Done"); externalprint_predicates (lines_from_files "../tutorial_solutions/stack.c") "../tutorial_solutions/stack.c" (loc_of_firststruct)
-*)
-

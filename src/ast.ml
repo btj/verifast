@@ -14,7 +14,7 @@ let dummy_srcpos = ("<nowhere>", 0, 0)
 let dummy_loc = (dummy_srcpos, dummy_srcpos)
 
 (*The following structnewmap represents the structs parsed from the program*)
-(*structnewmap is a list of structs, where each struct consist of the name of the struct and a list of fields which are represented as the identifier of the field and the name of the field*)
+(*structnewmap is a list of structs, where each struct consists of the name of the struct and a list of fields which are represented as the identifier of the field and the name of the field*)
 type structnewmap = (string * ((string * string) list))list 
 
 (*
@@ -638,6 +638,7 @@ and
       action_decl list *
       handle_pred_decl list
   (* enum def met line - name - elements *)
+  | Autogen of string * string
   | EnumDecl of loc * string * (string * expr option) list
   | Global of loc * type_expr * string * expr option
   | UnloadableModuleDecl of loc

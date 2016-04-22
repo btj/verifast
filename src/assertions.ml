@@ -33,6 +33,9 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   
   include CheckFile1(CheckFileArgs)
   
+  (*The following autopredicate function is just a function that passes a call from Verify_Expr to VeriFast1*)
+  let autopredicate file =  externalprint_predicates (lines_from_files file) file (loc_of_firststruct)
+  
   let _ = if options.option_verbose = -1 then Printf.printf "%10.6fs: >> verification of %s \n" (Perf.time()) filepath  
 
   (* Region: production of assertions *)

@@ -826,7 +826,8 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
               TermPat t -> ctxt#pprint t
             | SrcPat pat -> string_of_pat pat
           in
-          Printf.sprintf "No matching heap chunks: %s%s(%s)" predname targs (String.concat ", " (List.map string_of_pat0 pats))
+          (*The following print_missingheap_precondition is triggered only when the user use the autofix button and it first check if the missing heap is a result of encapsualted predicate in the heap, if yes open the predicate; otherwise, add hte missing heap chunk in the precondition*)
+          (print_missingheap_precondition predname targs (List.map string_of_pat0 pats) h env); Printf.sprintf "No matching heap chunks: %s%s(%s)" predname targs (String.concat ", " (List.map string_of_pat0 pats))
         in
         assert_false h env l message (Some "nomatchingheapchunks")
   (*      

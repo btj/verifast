@@ -3,11 +3,13 @@ language: C
 os:
   - linux
   - osx
+
+dist: trusty
   
 sudo: required
 
 install:
-  - ./setup-build-with-opam.sh
+  - ./setup-build.sh
 
 script:
-  - source ~/.bashrc && cd src && make -j 2
+  - cd src && make VERBOSE=yes -j 2

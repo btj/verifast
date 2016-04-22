@@ -20,7 +20,10 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   module CheckFile_VerifyExpr(CheckFileArgs: CHECK_FILE_ARGS) = struct
   
   include CheckFile_Assertions(CheckFileArgs)
-  
+
+  (*The following trial function just pass the call from Verifast file to assertions file to auto generate predicates. ToDo: the name of the function should be changed for better name convention*)  
+  let trial programpath = autopredicate programpath
+
   let rec block_assigned_variables ss =
     match ss with
       [] -> []

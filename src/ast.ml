@@ -13,6 +13,10 @@ type loc = (srcpos * srcpos) (* ?loc *)
 let dummy_srcpos = ("<nowhere>", 0, 0)
 let dummy_loc = (dummy_srcpos, dummy_srcpos)
 
+(*The following structnewmap represents the structs parsed from the program*)
+(*structnewmap is a list of structs, where each struct consist of the name of the struct and a list of fields which are represented as the identifier of the field and the name of the field*)
+type structnewmap = (string * ((string * string) list))list 
+
 (*
 Visual Studio format:
 C:\ddd\sss.xyz(123): error VF0001: blah

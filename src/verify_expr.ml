@@ -138,6 +138,9 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | Some (path0, line0) ->
       if line = line0 && path = path0 then
         assert_false h env l "Breakpoint reached." None
+      (*The following branch of if-condition is added to just generate the predciate and stop if the user pressed the auto-predicate gen button*)
+      else if line0 < line && path = path0 && genPredicate then
+        assert_false h env l "Predicate generated." None
 
   let is_empty_chunk name targs frac args =
     List.exists

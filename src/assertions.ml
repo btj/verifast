@@ -441,7 +441,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         None
       else
       (*The update_postcondition_counter function doesn't do anything if autofix is not the pressed key. If the user pressed autofix and the error he gets is Cannot prove. autofix will automatically try to fix the problem*)
-        (update_postcondition_counter (ctxt#pprint v) (ctxt#pprint t) l); assert_false h env l (Printf.sprintf "Cannot prove %s == %s" (ctxt#pprint t) (ctxt#pprint v)) None)
+        ((update_postcondition_counter (ctxt#pprint v) (ctxt#pprint t) l); assert_false h env l (Printf.sprintf "Cannot prove %s == %s" (ctxt#pprint t) (ctxt#pprint v)) None)
     in
     match pat with
     | SrcPat (LitPat (WVar (lx, x, LocalVar))) ->

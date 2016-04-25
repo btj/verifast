@@ -1,3 +1,4 @@
+open Printf
 open Proverapi
 open Big_int
 open Printf
@@ -21,6 +22,8 @@ module type VERIFY_PROGRAM_ARGS = sig
   val reportUseSite: decl_kind -> loc -> loc -> unit
   val reportExecutionForest: node list ref -> unit
   val breakpoint: (string * int) option
+  val genPredicate: bool
+  val autofix: bool
   val targetPath: int list option
 end
 
@@ -91,6 +94,208 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   
   let globalPluginMap = ref []
   
+  (*By: Mahmoud*)
+
+ let print_and_return_termnode g = (*kfprintf (fun _ -> flush stdout) stdout "String %s" (ctxt#pprint g); fprintf stdout "\n";*) g
+ let print_termnode g = ()(*kfprintf (fun _ -> flush stdout) stdout "String %s" (ctxt#pprint g); fprintf stdout "\n"*)
+  
+
+ let pprint_leaked_context_term t = 
+    if options.option_simplify_terms then
+      match ctxt#simplify t with None -> print_termnode t | Some(t) -> print_termnode t
+    else
+      print_termnode t
+
+ let rec print_leaked_chunk_argument ts = match ts with 
+   x :: [] -> pprint_leaked_context_term x;       
+  |x :: y -> pprint_leaked_context_term x; print_leaked_chunk_argument y
+   
+ let return_leaked_context_term t = 
+    if options.option_simplify_terms then
+      match ctxt#simplify t with None -> ctxt#pprint t | Some(t) -> ctxt#pprint t
+    else
+      ctxt#pprint t
+
+ let rec return_leaked_chunk_arguments ts = match ts with 
+   x :: [] -> return_leaked_context_term x :: [];       
+  |x :: y -> (return_leaked_context_term x) :: (return_leaked_chunk_arguments y)
+   
+
+
+ let print_leaked_chunk h msg = 
+       match h with
+        (Chunk ((g, literal), targs, coef, ts, size)) :: [] -> kfprintf (fun _ -> flush stdout) stdout "This is the leaked chunk: "; print_termnode g; print_leaked_chunk_argument ts
+       |(Chunk ((g, literal), targs, coef, ts, size)) :: y -> kfprintf (fun _ -> flush stdout) stdout "This is the leaked chunk: "; print_termnode g; print_leaked_chunk_argument ts
+       
+  let rec print_env env = match env with 
+     (s, t) :: [] -> kfprintf (fun _ -> flush stdout) stdout "%s" s; kfprintf (fun _ -> flush stdout) stdout "%s" (ctxt#pprint t)
+    |(s, t) :: x ->  kfprintf (fun _ -> flush stdout) stdout "%s" s; kfprintf (fun _ -> flush stdout) stdout "%s \n" (ctxt#pprint t); print_env x
+
+ 
+ let rec create_leaked_heap h env (leaked_h : leaked_heap)= 
+       match h with
+        (Chunk ((g, literal), targs, coef, ts, size)) :: [] ->  
+             (match leaked_h with 
+              Leak_chunk ((s, a::b)) :: x  ->  Leak_chunk ((ctxt#pprint g), (return_leaked_chunk_arguments ts)) :: Leak_chunk ((s, a::b)) :: x
+              |_ -> Leak_chunk ((ctxt#pprint g), (return_leaked_chunk_arguments ts)) :: [])       
+       |(Chunk ((g, literal), targs, coef, ts, size)) :: y ->                  
+             match leaked_h with 
+               Leak_chunk ((s, a::b)) :: x  ->  Leak_chunk ((ctxt#pprint g), (return_leaked_chunk_arguments ts)) :: Leak_chunk ((s, a::b)) :: x
+              |_ -> Leak_chunk ((ctxt#pprint g), (return_leaked_chunk_arguments ts)) :: []    
+
+ (*The following let function is the same as the brevious function, but I had to write it again for name convention*) 
+
+ let rec create_partial_heap h env= 
+       match h with
+        [] -> []
+    |   (Chunk ((g, literal), targs, coef, ts, size)) :: y ->  printnow "%s %s \n" "heeap "(ctxt#pprint g);
+            Leak_chunk ((ctxt#pprint g), (return_leaked_chunk_arguments ts)) :: (create_partial_heap y env)
+              
+    
+      
+ let rec return_leaked_heap h env=
+    match h with
+        [] -> []
+    |   Chunk((g, literal), targs, coef, ts, size) :: nextchunk ->
+        Leak_chunk((ctxt#pprint g), (return_leaked_chunk_arguments ts)) :: (return_leaked_heap nextchunk env)
+       
+ let print_string name = kfprintf (fun _ -> flush stdout) stdout "%s " name
+ 
+ let rec print_arg (arguments: string list) oc firstarg = 
+    match arguments with
+        x :: [] -> if(firstarg) then (output_string_file oc "(";  output_string_file oc x; output_string_file oc ")") else (output_string_file oc x; output_string_file oc ")")
+        |x :: y -> if(firstarg) then (output_string_file oc "("; output_string_file oc x; output_string_file oc ","; print_arg y oc false) else (output_string_file oc x; output_string_file oc ","; print_arg y oc false)
+     
+ let check_predicate name = Str.split_delim (Str.regexp "[0..9]+") name
+ let return_predicate_name names = 
+    match names with
+        x :: [] -> x
+       |x :: y  -> x
+             
+     
+ let rec print_leaked_heap (leaked_h : leaked_heap) oc =
+    match leaked_h with 
+        [] -> ()
+   |    Leak_chunk (name, arguments) :: x ->  (output_string_file oc (return_predicate_name (check_predicate name)));  (print_arg arguments oc true) (*I commented the following line because i want to print one postcondition per time, not the whole postcondition per once*) (*(print_leaked_heap x oc); flush oc *) 
+
+ let rec check_result_value_arg arguments resultvalue = 
+    match arguments with 
+        x :: [] -> if x = resultvalue then "result" :: [] else x :: [] 
+        |x :: y -> if x = resultvalue then "result" :: check_result_value_arg y resultvalue  else x :: check_result_value_arg y resultvalue
+       
+
+ let rec check_result_value leaked_h resultvalue = 
+    match leaked_h with
+        [] -> []
+    |   Leak_chunk (name, arguments) :: x  -> Leak_chunk (name, (check_result_value_arg arguments resultvalue)) :: check_result_value x resultvalue  
+        
+ let rec check_leaked_returned_value env leaked_h = 
+    match env with
+        (s, t) :: [] -> if s = "result" then (check_result_value leaked_h (ctxt#pprint t)) else leaked_h  
+       |(s, t) :: x -> if s = "result" then (check_result_value leaked_h (ctxt#pprint t)) else (check_leaked_returned_value x leaked_h)
+   
+
+   
+ let input_line_opt ic =
+  try Some (input_line ic)
+  with End_of_file -> None
+ 
+let print_line l = kfprintf (fun _ -> flush stdout) stdout "%i " l; l 
+ 
+let print_string_line l =  kfprintf (fun _ -> flush stdout) stdout "%s" l
+
+let missing_heap msg = 
+    match msg with 
+        message -> String.sub message  (print_line ((String.index message ':') + 1)) ((print_line (String.length message)) - (print_line ((String.index message ':') + 1)))
+
+
+let print_missing_heap msg oc=
+    output_string_file oc msg; flush oc
+
+let new_post_cond line = String.sub line 0 (String.index line ';')
+
+let new_pre_cond line = String.sub line 0 (String.index line ';')
+
+let add_new_post leaked_h oc = 
+    output_string_file oc " &*& "; 
+    print_leaked_heap leaked_h oc; 
+    output_string_file oc ";"
+    
+let add_new_pre msg oc = output_string_file oc " &*& "; flush oc; print_missing_heap msg oc; output_string_file oc ";"; flush oc    
+
+open Printf
+
+(*Any function starts with externalprint means that it modifies the .c file that is being verified*)
+
+let externalprint_post file_lines file leaked_h line_no= 
+let oc = open_out file in
+    let rec modify i file_lines =     
+        match file_lines with
+           | line :: [] -> 
+                if (line = "\n") then 
+                    (output_string_file oc "\n") 
+                else (if(i = line_no) then 
+                    (output_string_file oc (new_post_cond line); add_new_post leaked_h oc; output_string_file oc "\n") 
+                else 
+                    (output_string_file oc line; output_string_file oc "\n"))
+           | line :: nextline -> 
+                if (line = "\n") then 
+                    (output_string_file oc "\n"; modify (succ i) nextline) 
+                else (if (i = line_no) then 
+                    (output_string_file oc (new_post_cond line); add_new_post leaked_h oc; output_string_file oc "\n"; modify (succ i) nextline) 
+                else (output_string_file oc line; output_string_file oc "\n"; modify (succ i) nextline))
+           | [] -> close_out oc;
+   in modify 1 file_lines
+           
+           
+let externalprint_pre file_lines file msg line_no =
+let oc = open_out file in
+    let rec modify i file_lines =
+        match file_lines with
+              [] -> close_out oc
+            | line :: nextline -> 
+                if (line = "\n") then             
+                    (output_string_file oc "\n";
+                    modify (succ i) nextline) 
+                else (if (i = line_no) then 
+                    (output_string_file oc (new_pre_cond line); 
+                    add_new_pre msg oc; 
+                    output_string_file oc "\n"; 
+                    modify (succ i) nextline) 
+                else      
+                    (output_string_file oc line; 
+                    output_string_file oc "\n";
+                    modify (succ i) nextline))
+           in modify 1 file_lines
+           
+let externalprint_open_stmt file_lines file msg line_no =
+let oc = open_out file in
+    let rec modify i file_lines =
+        match file_lines with
+            [] -> close_out oc
+        |   line :: nextline -> 
+                if (line = "\n") then 
+                    (output_string_file oc "\n"; modify (succ i) nextline) 
+                else (if (i = line_no) then 
+                    (output_string_file oc line; output_string_file oc msg; modify (succ i) nextline) 
+                else (output_string_file oc line; output_string_file oc "\n"; modify (succ i) nextline))
+           in modify 1 file_lines
+
+    
+let read_line i = try Some (input_line i) with End_of_file -> None 
+
+let lines_from_files filename =
+  let rec lines_from_files_aux i acc = match (read_line i) with 
+    | None -> List.rev acc
+    | Some s -> lines_from_files_aux i (s :: acc) in 
+  lines_from_files_aux (open_in filename) [] 
+
+
+
+
+(*End*)
+	
+
   let pprint_context_stack cs =
     List.map
       (function
@@ -114,9 +319,77 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
        | Branching branch -> Branching branch)
       cs
 
+
+  (*By: Mahmoud -> the search_context_Stack is very similar to print_context_stack, but it doesn't print anything. It just returns the line number of consuming assertion after which the leak happens. *)
+ let search_context_stack_post cs=  
+    List.map
+      (function
+         Assuming t -> 0
+       | Executing (h, env, l, msg) ->   (match msg with
+                "Consuming assertion" -> 
+                    (match l with
+                         ((s, r, col), (s1, r1, col1)) -> kfprintf (fun _ -> flush stdout) stdout "%i " r; r) 
+                | _ -> 0)
+       | PushSubcontext -> 0
+       | PopSubcontext ->  0
+       | Branching branch ->  0)
+      cs
+   
+ let search_context_stack_pre cs=  
+    List.map
+      (function
+         Assuming t -> 0
+       | Executing (h, env, l, msg) ->   (match msg with
+                "Producing assertion" -> 
+                    (match l with
+                         ((s, r, col), (s1, r1, col1)) -> kfprintf (fun _ -> flush stdout) stdout "%i " r; r) 
+                | _ -> 0)
+       | PushSubcontext -> 0
+       | PopSubcontext ->  0
+       | Branching branch ->  0)
+      cs  
+
+
   let register_pred_ctor_application t symbol symbol_term ts inputParamCount =
     pred_ctor_applications := (t, (symbol, symbol_term, ts, inputParamCount)) :: !pred_ctor_applications
 
+
+let line_no l = 
+    match l with
+       ((s, r, col), (s1, r1, col1)) -> (kfprintf (fun _ -> flush stdout) stdout "%i " r)
+
+(*By Mahmoud: this is really a bad idea, but I don't have any clue now, so I will improve it later*)
+let rec determine_no list_of_nos = 
+    match list_of_nos with
+        x :: [] -> if (x > 0) then x else 0
+       |x :: y :: z  -> if (x > y) then (determine_no (x :: z)) else (determine_no (y :: z)) 
+
+
+let is_no_matching msg =
+    if(String.length msg > 25) then
+        let msg_first_part = (String.sub msg 0 25) in
+            match msg_first_part with
+                "No matching heap chunks: " -> (String.sub msg 25 ((String.length msg) - 25))
+            |   _ -> "Other error type"    
+    else
+        "Other error type"
+        
+
+
+(*Any function ends with _test like the next function means that this funciton was just written for test purposes*)
+let rec print_test env =
+    match env with
+        [] -> kfprintf (fun _ -> flush stdout) stdout "%s " "\n"
+    |   (s, t) :: env -> 
+            kfprintf (fun _ -> flush stdout) stdout "%s %s " s " - "; print_test env
+            
+let print_context_stack_test cs =
+    match cs with
+        Executing (h, env, l, msg) :: cs -> print_test env
+    |   _   -> ()
+
+(*End*)
+	
   let assert_false h env l msg url =
     raise (SymbolicExecutionError (pprint_context_stack !contextStack, "false", l, msg, url))
   
@@ -127,7 +400,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         Some (b::bs) ->
         if b = oldBranch then
           if bs = [] then
-            assert_false [] [] l "Target branch reached" None
+            assert_false [] [] l "Target branch reached" None   
           else
             Some bs
         else
@@ -1491,6 +1764,866 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
    
   let structmap = structmap1 @ structmap0
   
+  (*By Mahmoud: The following is Automated VeriFast core *)
+  
+  let autgendeclmap=
+    if(autofix || genPredicate) then begin
+        let rec iter autodm ds =
+            match ds with 
+                [] -> []
+             |  Autogen(s1, s2) :: ds -> Autogen(s1, s2) :: iter autodm ds 
+             | _ :: ds -> iter autodm ds
+        in
+        match ps with
+          [PackageDecl(_,"",[],ds)] -> iter [] ds
+        | _ when file_type path=Java -> []
+    end
+    else
+     []
+  
+  let print_predicate_param fields =
+    match fields with 
+        None -> ()
+    |   Some v -> (kfprintf (fun _ -> flush stdout) stdout "3333: %s4444, " v)
+  
+ 
+
+ (* let print_predicates =
+    let rec iter predicatefamily ds =
+        match ds with 
+            [] -> ()
+        |   PredFamilyInstanceDecl(_,name, _, _, fields, body) :: ds -> (name, (generate_param fields), generate_body body);(kfprintf (fun _ -> flush stdout) stdout "\n 111111%s22222:" name); print_predicate_param fields; iter predicatefamily ds
+        |   _ :: ds -> iter predicatefamily ds
+    in
+    match ps with
+      [PackageDecl(_,"",[],ds)] -> iter [] ds
+    | _ when file_type path=Java -> ()
+                       *)
+ 
+  
+  let check_fields fds_opt =
+    match fds_opt with
+       Some (Field(a1,a2,a3,a4,a5,a6,a7,a8) :: a9) -> ()(* kfprintf (fun _ -> flush stdout) stdout "%s" s *)
+   |   _ -> ()
+  
+  let print_Struct =
+    let rec iter ds =
+        match ds with
+            [] ->  ()(*kfprintf (fun _ -> flush stdout) stdout "String: %s" "No more structs. \n"*)
+        |   (sn, (((s,l,l1),(s1,l2,l3)), fds_opt))::dss -> (*kfprintf (fun _ -> flush stdout) stdout "String struct: %s %s %i %s" sn " : " l "\n";*) (check_fields fds_opt); (iter dss)
+    in iter structdeclmap
+    
+    let loc_of_firststruct =
+        let rec iter ds line_no =
+            match ds with
+                [] -> line_no
+            |   (sn, (((s,l,l1),(s1,l2,l3)), fds_opt))::dss ->
+                if(line_no = 0) then
+                    iter dss l
+                else if (l < line_no) then
+                    iter dss l 
+                else 
+                    iter dss line_no
+        in iter structdeclmap 0 
+  
+  let checknormalfieldtype type_ =
+        match type_ with
+            Bool -> "Bool"
+          | Void -> "Void"
+          | IntType -> "Int"
+          | UShortType -> "UShort"
+          | ShortType -> "Short"
+          | UintPtrType -> "Other"  (* The uintptr_t type from the C99 standard. It's an integer type big enough to hold a pointer value. *)
+          | RealType -> "Other"  (* Mathematical real numbers. Used for fractional permission coefficients. Also used for reasoning about floating-point code. *)
+          | Float -> "Float"
+          | Double -> "Double"
+          | LongDouble -> "LongDouble"
+          | UChar -> "UChar"
+          | Char -> "Char"
+          | StructType(s) -> "String"
+          | PtrType(t) -> "Other"
+          | FuncType(s) -> "Other"   (* The name of a typedef whose body is a C function type. *)
+       (*   | InductiveType of string * type_ list -> "Other"
+          | PredType of string list * type_ list * int option * inductiveness -> "Other" (* if None, not necessarily precise; if Some n, precise with n input parameters *)
+          | PureFuncType of type_ * type_ -> "Other"  (* Curried *)
+          | ObjType of string -> "Other"
+          | ArrayType of type_ -> "Other"
+          | StaticArrayType of type_ * int -> "Other" (* for array declarations in C *)
+          | BoxIdType -> "Other" (* box type, for shared boxes *)
+          | HandleIdType -> "Other" (* handle type, for shared boxes *)
+          | AnyType -> "Other" (* supertype of all inductive datatypes; useful in combination with predicate families *)
+          | TypeParam of string -> "Other" (* a reference to a type parameter declared in the enclosing datatype/function/predicate *)
+          | InferredType of < > * type_ option ref -> "Other" (* inferred type, is unified during type checking. '< >' is the type of objects with no methods. This hack is used to prevent types from incorrectly comparing equal, as in InferredType (ref None) = InferredType (ref None). Yes, ref None = ref None. But object end <> object end. *)
+          | ClassOrInterfaceName of string -> "Other" (* not a real type; used only during type checking *)
+          | PackageName of string -> "Other" (* not a real type; used only during type checking *)
+          | RefType of type_ -> "Other" (* not a real type; used only for locals whose address is taken *)
+          | PluginInternalType of DynType.dyn -> "Other"
+  *)
+  let rec checkfieldtype fieldtype =
+        match fieldtype with
+            StructTypeExpr(l,s) -> s
+          | PtrTypeExpr(l,t) -> checkfieldtype t
+          | ArrayTypeExpr(l,t) -> checkfieldtype t
+          | StaticArrayTypeExpr(l, t, i) -> checkfieldtype t
+          | ManifestTypeExpr(l, t) -> checknormalfieldtype t  (* A type expression that is obviously a given type. *)
+          | IdentTypeExpr(loc,Some (s1), s) -> s
+          
+          (*| ConstructedTypeExpr of loc * string * type_expr list  (* A type of the form x<T1, T2, ...> *)
+          | PredTypeExpr of loc * type_expr list * int option (* if None, not necessarily precise; if Some n, precise with n input parameters *)
+  *)
+          | PureFuncTypeExpr(l, (t::t1)) -> checkfieldtype t  
+          | _ -> ""
+    let rec print_pat pat =
+        match pat with 
+            LitPat(exp) ->  ""  (* literal pattern *)
+        |   VarPat(l, s) ->  s  (* var pattern, aangeduid met ? in code *)
+        |   DummyPat ->  ""
+        |   CtorPat(l, s1, (pat2 :: pat3)) ->  ""
+        |   WCtorPat(_,_,_,_,_,_,_) ->  ""
+  
+    let rec print_exp expr =
+        match expr with
+            True(_) -> ("","")
+          | False(_) -> ("","")
+          | Null(_) ->  ("","")
+          | Var(_,s3,_) ->  ("", s3)  (* An identifier. *)
+          | Operation(_,_,_,_) ->  ("","")
+          | IntLit (_,_,_) ->  ("","")
+          | RealLit(_,_) -> ("","")
+          | StringLit(_,_) -> ("","")
+          | ClassLit(_,_) -> ("","") (* class literal in java *)
+          | Read(_, Var(_,s2,_),s) -> (s2, s) (* lezen van een veld; hergebruiken voor java field access *)
+          | ArrayLengthExpr(_,_) -> ("","")
+          | WRead(_,_,_,_,_,_,_,_) -> ("","")
+          | _ -> ("","")
+          (*
+          (* Expression which returns the value of a field of an instance of an
+           * inductive data type. *)
+          | WReadInductiveField of
+              loc *
+              expr (* The expression which results an instance of the inductive
+                    * data type. (usually just a variable) *) *
+              string (* inductive data type name *) *
+              string (* constructor name *) *
+              string (* field name *) *
+              type_ list (* type arguments *)
+          | ReadArray of loc * expr * expr
+          | WReadArray of loc * expr * type_ * expr
+          | Deref of loc * expr * type_ option ref (* pointee type *) (* pointer dereference *)
+          | CallExpr of (* oproep van functie/methode/lemma/fixpoint *)
+              loc *
+              string *
+              type_expr list (* type arguments *) *
+              pat list (* indices, in case this is really a predicate assertion *) *
+              pat list (* arguments *) *
+              method_binding
+          | ExprCallExpr of (* Call whose callee is an expression instead of a plain identifier *)
+              loc *
+              expr *
+              expr list
+          | WFunPtrCall of loc * string * expr list
+          | WPureFunCall of loc * string * type_ list * expr list
+          | WPureFunValueCall of loc * expr * expr list
+          | WFunCall of loc * string * type_ list * expr list
+          | WMethodCall of
+              loc *
+              string (* declaring class or interface *) *
+              string (* method name *) *
+              type_ list (* parameter types (not including receiver) *) *
+              expr list (* args, including receiver if instance method *) *
+              method_binding
+          | NewArray of loc * type_expr * expr
+          | NewObject of loc * string * expr list
+          | NewArrayWithInitializer of loc * type_expr * expr list
+          | IfExpr of loc * expr * expr * expr
+          | SwitchExpr of
+              loc *
+              expr *
+              switch_expr_clause list *
+              (loc * expr) option * (* default clause *)
+              (type_ * (string * type_) list * type_ list * type_) option ref (* used during evaluation when generating an anonymous fixpoint function, to get the prover types right *)
+          | PredNameExpr of loc * string (* naam van predicaat en line of code*)
+          | CastExpr of loc * bool (* truncating *) * type_expr * expr (* cast *)
+          | Upcast of expr * type_ (* from *) * type_ (* to *)  (* Not generated by the parser; inserted by the typechecker. Required to prevent bad downcasts during autoclose. *)
+          | TypedExpr of expr * type_  (* Not generated by the parser. In 'TypedExpr (e, t)', 't' should be the type of 'e'. Allows typechecked expression 'e' to be used where a not-yet-typechecked expression is expected. *)
+          | WidenedParameterArgument of expr (* Appears only as part of LitPat (WidenedParameterArgument e). Indicates that the predicate parameter is considered to range over a larger set (e.g. Object instead of class C). *)
+          | SizeofExpr of loc * type_expr
+          | AddressOf of loc * expr
+          | ProverTypeConversion of prover_type * prover_type * expr  (* Generated during type checking in the presence of type parameters, to get the prover types right *)
+          | ArrayTypeExpr' of loc * expr (* horrible hack --- for well-formed programs, this exists only during parsing *)
+          | AssignExpr of loc * expr * expr
+          | AssignOpExpr of loc * expr * operator * expr * bool (* true = return value of lhs before operation *) * type_ list option ref * type_ option ref
+          | InstanceOfExpr of loc * expr * type_expr
+          | SuperMethodCall of loc * string * expr list
+          | WSuperMethodCall of loc * string * expr list * (loc * ghostness * (type_ option) * (string * type_) list * asn * asn * ((type_ * asn) list) * visibility)
+          | InitializerList of loc * expr list
+          | SliceExpr of loc * pat option * pat option
+            *)
+    let print_otherpat pat =
+        []
+    
+    let rec generate_body body = 
+        match body with
+        |   Sep(_,PointsTo(_,Read(_, Var(_,structname,_),fieldname),VarPat(l, newgostname)),asn2) -> Name_ref(structname, fieldname, newgostname ) :: generate_body asn2
+        |   Sep(_,PredAsn(_,predref,_,[], (LitPat(Var(_,fieldname,_)):: restt)),asn2) ->  Inner_pred(predref#name, (fieldname :: print_otherpat restt)) :: generate_body asn2
+        |   PredAsn(_,predref,_, [], LitPat(Var(_,fieldname,_)):: restt) -> Inner_pred(predref#name, (fieldname :: print_otherpat restt)) :: []
+        |   IfAsn(_,_,asnn1,asnn2) -> generate_body asnn2
+        |   _ -> []
+
+ 
+ 
+ 
+  (*          
+    let rec generate_body body = 
+    match body with
+    |   InstPredAsn(l, expr, name, expr1, _) -> (kfprintf (fun _ -> flush stdout) stdout "I am here: %s \n" name); ("","","")
+    |   PredAsn(_,_,_,_,_) -> (kfprintf (fun _ -> flush stdout) stdout "I am here: %s \n" "Type 2"); ("","","")
+    |   WPredAsn(_,_,_,_,_,_) -> (kfprintf (fun _ -> flush stdout) stdout "I am here: %s \n" "Type 3"); ("","","")
+    |   WInstPredAsn(_,_,_,_,_,_,_,_) -> (kfprintf (fun _ -> flush stdout) stdout "I am here: %s \n" "Type 4"); ("","","")
+    |   PointsTo(_,expr1,pat) ->   (kfprintf (fun _ -> flush stdout) stdout "I am here: %s \n" "Type 5"); ((print_exp expr1), (print_pat pat))
+    |   WPointsTo(_,_,_,_) -> (kfprintf (fun _ -> flush stdout) stdout "I am here: %s \n" "Type 6"); ("","","")
+    |   ExprAsn(_,_) -> (kfprintf (fun _ -> flush stdout) stdout "I am here: %s \n" "Type 7"); ("","","")
+    |   Sep(_,asn1,asn2) -> (kfprintf (fun _ -> flush stdout) stdout "I am here: %s \n" "Type 8"); generate_body asn1 :: generate_body asn2
+    |   CoefAsn(_,_,_) -> (kfprintf (fun _ -> flush stdout) stdout "I am here: %s \n" "Type 9"); ("","","")
+    |   PluginAsn(_,_) -> (kfprintf (fun _ -> flush stdout) stdout "I am here: %s \n" "Type 10"); ("","","")
+    |   WPluginAsn(_,_,_) -> (kfprintf (fun _ -> flush stdout) stdout "I am here: %s \n" "Type 11"); ("","","")
+    |   EnsuresAsn(_,_) -> (kfprintf (fun _ -> flush stdout) stdout "I am here: %s \n" "Type 13"); ("","","")
+    |   MatchAsn(_,_,_) -> (kfprintf (fun _ -> flush stdout) stdout "I am here: %s \n" "Type 14"); ("","","")
+    |   WMatchAsn(_,_,_,_) -> (kfprintf (fun _ -> flush stdout) stdout "I am here: %s \n" "Type 15"); ("","","") 
+    |   IfAsn(_,_,asnn1,asnn2) -> (kfprintf (fun _ -> flush stdout) stdout "I am here: %s \n" "Type 16"); generate_body asnn1 :: generate_body asnn2
+    |   _ -> (kfprintf (fun _ -> flush stdout) stdout "I am here: %s \n" "Not this type"); ("","","")
+*)
+ 
+  let rec generate_param fields =
+    match fields with
+        [] -> []
+    |   (t, name) :: fields -> (checkfieldtype t, name) :: generate_param fields 
+  
+  let print_predicates =
+    if(autofix) then begin
+    let rec iter predicatefamily ds =
+        match ds with 
+            [] -> []
+        |   PredFamilyInstanceDecl(_,name, _, _, fields, body) :: ds -> (*((name, (generate_param fields),*) (name, (generate_param fields), (generate_body body)) :: (iter predicatefamily ds) (*) :: iter predicatefamily ds)*)
+        |   _ :: ds -> iter predicatefamily ds
+    in
+    match ps with
+      [PackageDecl(_,"",[],ds)] -> iter [] ds
+    | _ when file_type path=Java -> []
+    end
+    else
+    []
+
+(*  let check_precondition parametername loc =
+    let rec iter ds =
+        match ds with
+            [] -> "Error not other parameter found"
+        |   ExprAsn(((s, l1, l2),(s1, l3, l4)),expr) :: ds -> 
+                (if(l1 = loc) then
+                    match expr with
+                        True(_) -> (kfprintf (fun _ -> flush stdout) stdout "Inside Expr: %s \n" "T1111")
+                      | False(_) -> (kfprintf (fun _ -> flush stdout) stdout "Inside Expr: %s \n" "T2222")
+                      | Null(_) -> (kfprintf (fun _ -> flush stdout) stdout "Inside Expr: %s \n" "T3333")
+                      | Var(_,s3,_) -> (kfprintf (fun _ -> flush stdout) stdout "Inside Expr: %s \n" s3) (* An identifier. *)
+                      | Operation(_,_,_,_) -> (kfprintf (fun _ -> flush stdout) stdout "Inside Expr: %s \n" "T55555555555")
+                      | IntLit (_,_,_) -> (kfprintf (fun _ -> flush stdout) stdout "Inside Expr: %s \n" "Typeeeee 66666666666666666")
+                      | RealLit(_,_) -> (kfprintf (fun _ -> flush stdout) stdout "Inside Expr: %s \n" "Typeeeee 7777777777777777777")
+                      | StringLit(_,_) -> (kfprintf (fun _ -> flush stdout) stdout "Inside Expr: %s \n" "Typeeeee 888888888888")
+                      | ClassLit(_,_) ->  (kfprintf (fun _ -> flush stdout) stdout "Inside Expr: %s \n" "Typeeeee 99999999999") (* class literal in java *)
+                      | Read(_, Var(_,s2,_),s) ->  (kfprintf (fun _ -> flush stdout) stdout "Inside Expr: %s \n" s) (* lezen van een veld; hergebruiken voor java field access *)
+                      | ArrayLengthExpr(_,_) ->(kfprintf (fun _ -> flush stdout) stdout "Inside Expr: %s \n" "Typeeeee 11111")
+                      | WRead(_,_,_,_,_,_,_,_) -> (kfprintf (fun _ -> flush stdout) stdout "Inside Expr: %s \n" "Typeeeee 1222222222222")
+                      | _ -> (kfprintf (fun _ -> flush stdout) stdout "Inside Expr: %s \n" "Typeeeee 13")); ""
+   in
+    match ps with
+      [PackageDecl(_,"",[],ds)] -> iter ds
+    | _ when file_type path=Java -> []
+                                            
+  *)
+  
+  let rec print_predicates_test print_predicates =
+    match print_predicates with
+        [] -> ()
+    |   (name, parameters, body) :: next ->  kfprintf (fun _ -> flush stdout) stdout "Field name: %s %s" name "\n"; print_predicates_test next
+  
+  
+  let create_new_struct_map newstructmap =
+    let rec iter ds = 
+        match ds with
+            [] -> newstructmap
+        |   (sn, (l, fds_opt))::dss -> 
+                let rec add_struct_fields fds_opt =
+                    match fds_opt with
+                    
+                        Some([]) -> []
+                    |   Some (Field(a1,a2,a3,a4,a5,a6,a7, Some (a8)) :: a9) ->
+                            Structfields((checkfieldtype a3), a4) :: (add_struct_fields (Some (a9)))
+                
+                    |   Some (Field(a1,a2,a3,a4,a5,a6,a7, None) :: a9) ->
+                            Structfields((checkfieldtype a3), a4) :: (add_struct_fields (Some (a9)))   
+                    
+                    |   None -> []
+                in 
+                Structref(sn, add_struct_fields fds_opt, None) :: iter dss
+    in iter structdeclmap
+    
+    let rec check_struct_structure newstructmap =
+        match newstructmap with
+            [] -> newstructmap
+        |   Structref(sn, allfields, None) :: rest -> 
+            let rec iter fields=
+                match fields with
+                    [] -> Structref(sn, allfields, None) :: (check_struct_structure rest)
+                |   Structfields(ident, fieldname) :: fieldsrest -> 
+                    if(ident = sn) then
+                        Structref(sn, allfields, Some (Structure(fieldname, "Linkedlist"))) :: (check_struct_structure rest)
+                    else 
+                        (iter fieldsrest)
+            in iter allfields
+   (* in check_struct_structure (create_new_struct_map []) *)
+        
+                    
+
+  let rec print_struct_fields fields =
+    match fields with
+        [] -> ()
+    |   Structfields(iden, fieldname) :: nextfields -> kfprintf (fun _ -> flush stdout) stdout "Field name: %s %s %s %s" fieldname " : " iden "\n"; print_struct_fields nextfields
+
+  let print_new_struct_map newstmp=
+    let rec iter newstmp =
+        match newstmp with
+            [] -> kfprintf (fun _ -> flush stdout) stdout "String: %s" "No more structs. \n"
+        |   Structref(name, fields, x) :: nextstructs -> kfprintf (fun _ -> flush stdout) stdout "Strut name: %s %s" name " : "; print_struct_fields fields; 
+                (if (x = None) then  kfprintf (fun _ -> flush stdout) stdout " %s" "Not a linkedlist" else  kfprintf (fun _ -> flush stdout) stdout "%s" " A linkedlist"); 
+                iter nextstructs
+    in iter newstmp
+  
+ (* let () = print_new_struct_map (check_struct_structure (create_new_struct_map [])) *)
+  
+  
+  
+  
+  let rec print_all_fields structname fields oc =
+    match fields with
+        [] -> output_string_file oc " &*& malloc_block_"; output_string_file oc structname; output_string_file oc "("; output_string_file oc structname;output_string_file oc ") " 
+    |   Structfields(iden, fieldname) :: fields -> 
+            output_string_file oc structname; output_string_file oc "->"; output_string_file oc fieldname; output_string_file oc " |-> ?"; output_string_file oc fieldname; 
+            (if(fields <> []) then
+                output_string_file oc " &*& "
+            else
+                ());
+        print_all_fields structname fields oc
+  
+  let rec find_fieldname fields y oc =
+    match fields with
+        [] -> "error"
+    |   Structfields(iden, fieldname) :: fields -> 
+            if(iden = y) then 
+                fieldname 
+            else 
+                (find_fieldname fields y oc)
+            
+  
+  
+  let rec print_autogen_fields structname fields autogenmap oc=
+    match autogenmap with
+        [] -> ()
+    |   Autogen(x, y) :: autogenmap -> 
+            if(x = structname) then 
+                (output_string_file oc "&*& "; output_string_file oc y; output_string_file oc "("; output_string_file oc (find_fieldname fields y oc); output_string_file oc ", count)";   (print_autogen_fields structname fields autogenmap oc))
+            else 
+                (print_autogen_fields structname fields autogenmap oc)
+  
+  
+      
+  let rec check_contain_llist autogenmap structname oc flag=
+    match autogenmap with
+        [] -> 
+                if(flag = 0) then
+                        output_string_file oc ";) = \n"
+                else
+                        output_string_file oc "; \n"
+    |   Autogen(x, y) :: autogenmap -> printnow "%s \n" x; 
+            if(x = structname) then begin
+                if (flag = 0) then begin
+                    (output_string_file oc "; int count) = \n")
+                end
+                else 
+                    (output_string_file oc " &*& count >= 0; \n")
+            end
+            else 
+                check_contain_llist autogenmap structname oc flag
+  
+                
+  let print_inner_structure structname structure autogenmap oc =
+    match structure with
+        Some (Structure (x, "Linkedlist")) -> output_string_file oc " &*& "; output_string_file oc structname; output_string_file oc "("; output_string_file oc x; output_string_file oc ", ?count1) &*& count == count1 + 1 &*& count > 0; \n"
+    |   None -> (check_contain_llist autogenmap structname oc 1)
+  
+  let print_predicate_body structname fields autogenmap structure oc = 
+    print_all_fields structname fields oc; print_autogen_fields structname fields autogenmap oc; print_inner_structure structname structure autogenmap oc
+    
+
+  
+  let print_predicate_parameters structname fields autogenmap structure oc = 
+   output_string_file oc " (struct "; output_string_file oc structname; output_string_file oc " *"; output_string_file oc structname; 
+    match structure with
+        Some (Structure(_, "Linkedlist")) ->  output_string_file oc "; int count) = \n "; output_string_file oc structname; output_string_file oc " == 0 ? count == 0 : "; print_predicate_body structname fields autogenmap structure oc
+    |   None ->  (check_contain_llist autogenmap structname oc 0);
+    print_predicate_body structname fields autogenmap structure oc
+            
+   
+  
+  let generate_predicate autogenmap oc newstructmap = 
+    if(newstructmap <> []) then
+        (output_string_file oc "//The following predicates are auto generated \n"; flush oc; output_string_file oc "/*@ \n"; flush oc;
+        let rec iter newstructmap =
+            match newstructmap with 
+             [] -> output_string_file oc "@*/ \n"; flush oc
+        |    Structref(structname, fields, structure) :: nextnewstructmap -> output_string_file oc "\n"; flush oc; output_string_file oc "predicate";output_string_file oc " "; output_string_file oc structname; flush oc; print_predicate_parameters structname fields autogenmap structure oc; iter nextnewstructmap
+        in iter newstructmap)
+   else output_string_file oc "Errrrrrrrrrrrrrrrrrrrrrrrror"
+       
+       
+       
+let externalprint_predicates file_lines file line_no =
+ let oc = open_out file in
+    let rec modify i file_lines =
+        match file_lines with
+            |line :: [] -> if (line = "\n") then (output_string_file oc "\n"; flush oc) else (if(i = line_no) then ((generate_predicate (autgendeclmap) oc (check_struct_structure (create_new_struct_map []))); output_string_file oc "\n"; flush oc) else (output_string_file oc line; output_string_file oc "\n"; flush oc))
+            | line :: nextline -> if (line = "\n") then (output_string_file oc "\n"; flush oc; modify (succ i) nextline) else (if (i = line_no) then ((generate_predicate (autgendeclmap) oc (check_struct_structure (create_new_struct_map []))); flush oc; output_string_file oc "\n"; flush oc; output_string_file oc line; modify (succ i) nextline) else (output_string_file oc line; output_string_file oc "\n"; flush oc; modify (succ i) nextline))
+           | [] -> close_out oc;
+           in modify 1 file_lines
+
+  
+  let print_predicatemap predicatemap=
+    let rec iter predicatemap=
+        match predicatemap with 
+            [] -> ()
+        |   (name, parameter, body) :: predicaterest -> kfprintf (fun _ -> flush stdout) stdout "Name: %s %s" name " - "; 
+                let rec iterbody body =
+                    match body with
+                    |   [] -> ()
+                    |   Name_ref(s1, s2, s3) :: rest ->   kfprintf (fun _ -> flush stdout) stdout "Fuzz: %s %s %s" s1 s2 s3; iterbody rest
+                    |   Inner_pred(s1, s2::[]) :: rest -> (kfprintf (fun _ -> flush stdout) stdout "Fuzz: %s %s " s1 s2)
+                in iterbody body; iter predicaterest                
+    in iter predicatemap 
+  
+  let rec print_leaked_heap_test l_heap =
+        match l_heap with 
+                [] -> kfprintf (fun _ -> flush stdout) stdout "Leeaaak: %s %s" "No more leaks" "\n"
+        |       Leak_chunk(name, parameters) :: rest -> ((kfprintf (fun _ -> flush stdout) stdout "Leeaak: %s %s" name "\n"); print_leaked_heap_test rest)
+  
+  let rec check_existance_heap predicate_body l_heap = 
+    match l_heap with
+        [] -> false
+    |   Leak_chunk(name, parameters) :: rest_heap ->
+            match predicate_body with
+                Name_ref(structname, fieldname, newreferencename) -> 
+                    if(name = (String.concat  "_" (structname :: fieldname :: []) )) 
+                        then true 
+                        else check_existance_heap predicate_body rest_heap
+            |   Inner_pred (innerpredicatename, paramters) -> true
+
+           
+           
+let rec consume_leak_intopredicate l_heap predicatebody =
+    match predicatebody with
+        [] -> true
+        (*There is a mistake in the comming line that I will ignore now for simplicity, but I have to reconsider this function action. The l_heap need to be updated if the check existance_heap function returned true*)
+    |   bodyfirst :: bodyrest -> if(check_existance_heap bodyfirst l_heap) then consume_leak_intopredicate l_heap bodyrest else false
+    
+
+
+
+let rec return_encapspredicate predicatename (predmap: predicate_map) =
+    match predmap with
+        (predname, predicateparam, predicatebody) :: predmap ->
+            if(predicatename = predname)
+                then (predname, predicateparam, predicatebody)
+                else return_encapspredicate predicatename predmap
+
+
+
+let remove_encapsulated_chunk predbody l_chunk chunkname =
+    let rec iter predbody =
+        match predbody with
+            [] -> l_chunk
+        |   Name_ref(structname, fieldname, newreferencename) :: predicatebody -> 
+                if(chunkname = (String.concat  "_" (structname :: fieldname :: []) )) 
+                    then Leak_chunk("",("" :: [])) (*Adding dummy leaks*)
+                    else iter predicatebody
+        |   Inner_pred (innerpredicatename, paramters) :: predicatebody -> printnow "%s %s %s \n" "Cheeeck" chunkname innerpredicatename;
+                if(chunkname = innerpredicatename) 
+                    then Leak_chunk("",("" :: [])) (*Adding dummy leaks*)
+                    else iter predicatebody
+    in iter predbody
+            
+        
+
+
+let update_leak l_heap predicatename (predmap: predicate_map) =
+    match (return_encapspredicate predicatename predmap) with
+        (predname, predicateparam, predicatebody) -> 
+            let rec iter (l_heap : leaked_heap) =
+                match l_heap with
+                    [] -> []
+                |   (Leak_chunk(name, parameters) :: rest) ->
+                        (remove_encapsulated_chunk predicatebody (Leak_chunk(name, parameters)) name) :: iter rest
+            in iter l_heap
+                
+let rec remove_dummy_leaks l_heap =
+    match l_heap with
+        [] -> []
+    |   Leak_chunk(name, parameters) :: l_heap ->
+            match name with 
+                "" -> remove_dummy_leaks l_heap
+            |   _  -> Leak_chunk(name, parameters) :: (remove_dummy_leaks l_heap)  
+    
+
+
+let rec auto_close_predicate (l_heap: leaked_heap) (predmap: predicate_map) =
+    match predmap with
+        [] -> "The leaked heap cann't be encapsulated into predicate"
+    |   (predicatename, predicateparam, predicatebody) :: predmap ->
+            if(consume_leak_intopredicate l_heap predicatebody) then
+                predicatename
+            else auto_close_predicate l_heap predmap
+                        
+
+let rec malloc_name leak predicatename= printnow "%s " predicatename;
+    match leak with
+        [] -> ""
+    |   Leak_chunk(name, parameters) :: rest_heap ->  printnow "%s \n" name;
+            if((String.length name) > 12) then
+                if((String.sub name 0 12) = "malloc_block") then
+                    if((String.sub name 13 ((String.length name) - 13)) = predicatename) then
+                        match parameters with
+                            structname :: [] -> structname
+                    else
+                        malloc_name rest_heap predicatename
+                else
+                    malloc_name rest_heap predicatename
+            else
+                malloc_name rest_heap predicatename 
+        
+let check_leak_existance h env = return_leaked_heap h env
+
+let rec check_local_name name env =
+    match env with
+        [] -> name
+    |   (s, t) :: env -> 
+            if (name = (ctxt#pprint t)) then
+                s
+            else begin
+               check_local_name name env
+            end
+
+
+
+
+let rec check_local_name0 name cs row= 
+    match cs with
+        [] -> ""
+    |   Executing (h, env, l, msg) :: cs ->
+            (let rec iter_context row env= 
+                (match l with
+                   ((s,r,c),(s1,r1,c1)) ->
+                    (if(row = r) then
+                        (let rec iter env =
+                            match env with
+                                [] -> check_local_name0 name cs row
+                            |   (s, t) :: env ->  
+                                    (if (name = (ctxt#pprint t)) then
+                                       s
+                                    else
+                                       iter env)
+                         in iter env)
+                    
+                     else
+                        (check_local_name0 name cs row)))
+            in iter_context row env)                           
+    |   _ :: cs -> check_local_name0 name cs row
+      
+
+let check_ghostlocal_name name cs row = 
+    match name with
+        "_" ->       
+            let rec check_ghost_exist i =
+                let new_ghost = (Printf.sprintf "%s%i" "count" i) in
+                    if((check_local_name0 new_ghost cs row) = "") then
+                        Printf.sprintf "%s%s" "?" new_ghost 
+                    else
+                        (check_ghost_exist (i+1))
+            in check_ghost_exist 0
+    |   _ -> check_local_name0 name cs row
+                   
+
+let rec check_other_predicate_parameters predicatename predicatemap =
+    match predicatemap with
+        [] -> []
+    |   (name, parameters, body) :: predicatemap -> 
+            if(name = predicatename) then
+              let rec iter parameters =
+                    match parameters with
+                        [] -> []
+                        (*The following line also depends on the assumption that the struct name is the same as the predicate name*)
+                    |   (ttype, paramname) :: parameters -> if(ttype <> predicatename) then begin 
+                            if(paramname = "count") then "0" :: (iter parameters) else (Printf.sprintf "%s%i" paramname 0) :: (iter parameters) end else iter parameters
+              in iter parameters
+            else check_other_predicate_parameters predicatename predicatemap 
+                    
+ (*The following function filters the leaked heap and produce only chunks that should be written in the post condition and not be consumed at the end of the function*)
+ let rec filter_lheap lheap predmap = 
+    match lheap with
+        [] -> []
+    |   Leak_chunk (name, arguments) :: lheap ->
+            let rec iter predmap0 =
+                match predmap0 with
+                    [] -> Leak_chunk(name, arguments) :: filter_lheap lheap predmap
+                |   (predname, parameters, body) :: predmap0 ->
+                        let rec iter0 body =
+                            match body with
+                                [] -> iter predmap0
+                            |   Inner_pred (innerpredicatename, parameters) :: body ->
+                                    if(name = innerpredicatename) then
+                                        filter_lheap lheap predmap
+                                    else
+                                        iter0 body
+                            |   _ :: body ->
+                                    iter0 body
+                        in iter0 body
+            in iter predmap
+                                    
+                    
+    
+        
+let rec auto_close_stmt heap_leak l env= 
+    if(autofix) then
+        match l with
+            ((s, r, col), (s1, r1, col1)) ->
+                match (auto_close_predicate heap_leak (print_predicates)) with
+                    "The leaked heap cann't be encapsulated into predicate" ->
+                        externalprint_post (lines_from_files s) s (filter_lheap (check_leaked_returned_value env heap_leak) (print_predicates))  (determine_no (search_context_stack_post !contextStack)) 
+                |   predicatename -> 
+                        (auto_close_stmt (((Leak_chunk(predicatename, ((check_local_name (malloc_name heap_leak predicatename) env) :: (check_other_predicate_parameters predicatename (print_predicates))))) :: remove_dummy_leaks(update_leak heap_leak predicatename (print_predicates)))) l env)
+    
+          
+        
+(*I will assume in the following function that the name of preducate should be the same as the name of the struct*)        
+let check_missingheap predname targs parameters env l =
+       let rec iter parameters =
+        match parameters with
+            [] -> ()
+        |   x :: parameters -> iter parameters
+    in iter parameters
+        
+        
+
+let rec check_locality infered_count cs row = 
+    match cs with
+        [] -> false
+    |   Executing (h, env, l, msg) :: cs -> begin
+            match l with
+                ((s1,r1,c1),(s2,r2,c2)) -> 
+                         let rec iter env =
+                            match env with
+                                [] -> (check_locality infered_count cs row)
+                            |   (s, t) :: env -> 
+                                    if (infered_count = ctxt#pprint t) then
+                                        if(row = r1) then true else (iter env)                         
+                                    else
+                                        (iter env)
+                        in iter env
+            end                           
+    |   _ :: cs -> (check_locality infered_count cs row)
+   
+
+let rec create_assumptions_list cs =
+    match cs with
+        [] -> []
+    |   Assuming t :: cs -> Assuming t :: (create_assumptions_list cs)
+    |   _   :: cs -> create_assumptions_list cs
+    
+let rec create_assum_exp assumptions =
+    match assumptions with
+        [] -> []
+    |   Assuming t :: assumptions ->
+            if(try (String.contains (ctxt#pprint t) '+') with _ -> false && try (String.contains (ctxt#pprint t) '=') with _ -> false) then
+                let assumption = 
+                    String.trim (ctxt#pprint t)
+                in ((try (String.sub assumption 0 ((String.index assumption '=') - 1)) with _ -> (ctxt#pprint t)), (try (String.sub assumption ((String.index assumption '(') + 1) ((String.index assumption '+') - (String.index assumption '(') - 2)) with _ -> ""), (try (String.sub assumption ((String.index assumption '+') + 1) ((String.index assumption ')') - (String.index assumption '+') - 1)) with _ -> "")) :: (create_assum_exp assumptions) 
+            else
+                create_assum_exp assumptions
+
+
+(*Mahmoud: all functions with a name starting by test should be removed at the end*)
+let rec test_print_assumptions assumptions_list =
+    match assumptions_list with
+        [] -> ()
+    |   (leftoperand, rightoperand, addition) :: assumptions_list -> (test_print_assumptions assumptions_list)
+    
+    
+let rec solve_assump_equations assumptions_list infered_count (counter: int) =
+    printnow "%s \n" infered_count;
+    match assumptions_list with
+        [] -> (Printf.sprintf "%s%s%i" infered_count "-" counter)
+    |   (left, right, value) :: partial_assumptions_list ->
+            if(right = infered_count) then
+                solve_assump_equations assumptions_list left (counter + 1)
+            else 
+                solve_assump_equations partial_assumptions_list infered_count counter 
+                       
+    
+let rec check_assumptions infered_count cs =
+    match cs with
+        [] -> infered_count
+    |   Assuming t :: contextStack -> ctxt#pprint t
+    |   _ :: contextStack -> check_assumptions infered_count contextStack
+        
+let check_infered_conut infered_count cs row =
+    if((try (Str.search_forward (Str.regexp "[a-z]+[0-9]*") infered_count 0) with Not_found -> -1) >= 0) then 
+        if(check_locality (Str.matched_string infered_count) cs row) then
+            infered_count
+        else
+             solve_assump_equations (create_assum_exp (create_assumptions_list !contextStack)) (Str.matched_string infered_count) 0
+    else
+        infered_count
+             
+        
+let modify_postcondition s row col1 col2 infered_count wrong_count =
+    let lines =
+        lines_from_files s
+    in
+    let rec modify i row lines =
+        match lines with
+            [] -> []
+        |   line :: lines -> 
+                if (i = (row -1)) then                 
+                    let col =
+                        (*The flowing line ensures that the wrong_count is a seperate word, not part of other word*)
+                        let wrong_count0 = Printf.sprintf "%s%s" " " wrong_count and wrong_count1 = Printf.sprintf "%s%s" "," wrong_count in
+                        try ((Str.search_forward (Str.regexp wrong_count1) line col2) + 1) with
+                            Not_found -> 
+                                try ((Str.search_forward (Str.regexp wrong_count0) line col2) + 1) with
+                                    Not_found -> -1
+                    in
+                    let modifiedline =
+                        if(col = -1) then 
+                            line 
+                        else
+                            Printf.sprintf "%s%s%s" (String.sub line 0 (col)) (check_infered_conut infered_count !contextStack (row)) (String.sub line (col+(String.length wrong_count)) ((String.length line) - (col+(String.length wrong_count)))) 
+                    in 
+                        modifiedline :: lines
+                else
+                    line :: (modify (i+1) row lines)
+    in modify 0 row lines
+                    
+let print_modified_file lines s =
+    let oc = open_out s in
+        let rec update_file lines =
+            match lines with
+                [] -> close_out oc
+            |   line :: lines -> (if (line = "\n") then (output_string_file oc "\n") else (output_string_file oc line; output_string_file oc "\n")); update_file lines
+        in update_file lines
+        
+       
+           
+    
+    
+let update_postcondition_counter wrong_count infered_count l=
+    if(autofix) then
+        match l with
+            ((s, r1, col1), (s1, r2, col2)) -> print_modified_file (modify_postcondition s r1 col1 col2 infered_count wrong_count) s
+   
+
+        
+let rec parameters_list parameters row = 
+    match parameters with
+        [] -> []
+    |   x :: parameters -> ((check_ghostlocal_name x !contextStack row) :: (parameters_list parameters row))
+    
+let rec parameters_list0 parameters row =
+    match parameters with
+        [] -> []
+    |   x :: parameters -> printnow "%s: %s \n" "I am printing x" x;
+            if((try(Str.search_forward (Str.regexp "count") x 0) with Not_found -> -1) > -1) then
+                ((check_infered_conut x !contextStack row) :: (parameters_list0 parameters row))
+            else
+                ((check_ghostlocal_name x !contextStack row) :: (parameters_list0 parameters row))   
+                    
+let rec search_heap predname heap r parameters0 =
+    match heap with
+        [] -> ""
+    |   Leak_chunk(predicatename, parameters) :: heap -> printnow "%s %s \n" predname predicatename;
+            if(predname = predicatename) then
+                match parameters with
+                        [] -> search_heap predname heap r parameters0
+                |       par1 :: restparameters -> 
+                                match parameters0 with
+                                        [] -> search_heap predname heap r parameters0
+                                |       par2 :: restparameters0 ->
+                                                if(par1 = par2) then
+                                                        Printf.sprintf "\n//@open %s%s%s%s%s \n" predname "(" (String.concat "," (parameters_list0 parameters r)) ")" ";"
+                                                else
+                                                        search_heap predname heap r parameters0
+            else 
+                search_heap predname heap r parameters0
+                
+
+ 
+let print_missingheap_precondition predname targs parameters h env=
+    if(autofix) then begin
+        let context =
+             match !contextStack with 
+                Executing (h, env, loc, msg) :: rest -> begin
+                    if( msg = "Consuming assertion") then begin
+                        let rec call_verify rest =
+                            match rest with
+                                [] -> Executing (h, env, loc, msg)
+                            |   Executing (h, env, l, msg) :: rest -> call_verify rest
+                            |   PushSubcontext :: rest -> begin
+                                match rest with 
+                                    |   Executing (h1, env1, l1, msg1) :: rest -> Executing (h1, env1, l1, msg1)
+                                    |   _   ->  Executing (h, env, loc, msg)
+                                end   
+                        in call_verify rest
+                    end 
+                    else
+                        Executing (h, env, loc, msg)
+                end
+        in
+        match context with
+             Executing (h1, env1, loc1, msg1) ->
+                let l = loc1 and env = env1
+                in
+        let heap = create_partial_heap h env in             
+            match l with
+                ((s, r, col), (s1, r1, col1)) ->
+                    let predicatename = (String.sub predname 0 (try (String.index predname '_') with Not_found -> (String.length predname))) in
+                        let message = (search_heap predicatename heap r parameters) in
+                            if(message = "") then
+                               let message = Printf.sprintf "%s%s%s%s" (*(String.sub predname 0 (String.index predname '_'))*) predicatename "(" (String.concat "," (parameters_list0 parameters r)) ")" 
+                                in 
+                                    externalprint_pre (lines_from_files s) s message (print_line ((determine_no (search_context_stack_pre !contextStack))));   
+                            else
+                                externalprint_open_stmt (lines_from_files s) s message (r-1);
+                                if((try (Str.search_forward (Str.regexp "count[0-9]*") message 0) with Not_found -> -1) > -1) then
+                                    let message1 = Str.matched_string message in
+                                        if((try (Str.search_forward (Str.regexp "[-][0-9]+") message 0) with Not_found -> -1) > -1) then
+                                            let message2 = Printf.sprintf "%s %s %s" message1 ">" (String.sub (Str.matched_string message) 1 ((String.length (Str.matched_string message)) - 1)) in
+                                                externalprint_pre (lines_from_files s) s message2 (print_line ((determine_no (search_context_stack_pre !contextStack))))                          
+                                        else
+                                            let message2 = Printf.sprintf "%s %s" message1 "> 0" in
+                                                externalprint_pre (lines_from_files s) s message2 (print_line ((determine_no (search_context_stack_pre !contextStack)))) 
+        
+    end
+        
+  (*End of Automated VeriFast core*)
+
+
+
+
   let enummap = enummap1 @ enummap0
   
   let isfuncs = if file_type path=Java then [] else

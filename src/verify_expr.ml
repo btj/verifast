@@ -178,8 +178,8 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     let h = List.filter (function Chunk ((name, true), targs, frac, args, Some (PluginChunkInfo info)) -> check_plugin_state h env l name info; false | _ -> true) h in
     if h <> [] then
         (*The auto_close function is triggered when the user press auto-fix and a leak error happens. It tries to encapsulate the leak in as many predicates as possible and then include them in the post-condition*) 
-        (auto_close_stmt (check_leak_existance h env) l env); 
-        assert_false h env l msg (Some "leak");
+        ((auto_close_stmt (check_leak_existance h env) l env); 
+        (assert_false h env l msg (Some "leak")));
         check_breakpoint [] env l;
         SymExecSuccess
   

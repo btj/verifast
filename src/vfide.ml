@@ -1,4 +1,5 @@
 open Unix
+open Printf
 open Util
 open Ast
 open Lexer
@@ -201,6 +202,7 @@ let show_ide initialPath prover codeFont traceFont runtime layout javaFrontend e
     let a = GAction.add_action in
     GAction.add_actions actionGroup [
       a "File" ~label:"_File";
+      a "Fix" ~label:"_FixError";
       a "New" ~stock:`NEW;
       a "Open" ~stock:`OPEN;
       a "Save" ~stock:`SAVE ~accel:"<control>S" ~tooltip:"Save";
@@ -209,6 +211,8 @@ let show_ide initialPath prover codeFont traceFont runtime layout javaFrontend e
       a "Edit" ~label:"_Edit";
       a "Undo" ~stock:`UNDO ~accel:"<Ctrl>Z";
       a "Redo" ~stock:`REDO ~accel:"<Ctrl>Y";
+      a "GenPredicate" ~label: "Auto P" ~accel:"<Ctrl>P";
+      a "AutoFix" ~label: "AutoFix" ~accel:"<Ctrl>A";
       a "Preferences" ~label:"_Preferences...";
       a "View" ~label:"Vie_w";
       a "ClearTrace" ~label:"_Clear trace" ~accel:"<Ctrl>L";
@@ -274,6 +278,8 @@ let show_ide initialPath prover codeFont traceFont runtime layout javaFrontend e
         <menu action='Verify'>
           <menuitem action='VerifyProgram' />
           <menuitem action='RunToCursor' />
+          <menuitem action='GenPredicate' />
+          <menuitem action='AutoFix' />
           <separator />
           <menuitem action='RunShapeAnalysis' />
           <separator />
@@ -1298,6 +1304,113 @@ let show_ide initialPath prover codeFont traceFont runtime layout javaFrontend e
         Some (path, insert_line + 1)
     end
   in
+  let genPredicate runToCursor targetPath autofix ()  =
+    msg := Some("Verifying...");
+    updateMessageEntry(false);
+    clearTrace();
+    match !buffers with
+      [] -> ()
+    | tab::tabs ->
+      begin
+        match ensureHasPath tab with
+          None -> ()
+        | Some path ->
+          clearSyntaxHighlighting();
+          if not (List.exists sync_with_disk tabs) then
+          begin
+            let breakpoint = Some (path, -1)               
+            in
+            let postProcess = ref (fun () -> ()) in
+            begin try
+              let options = {
+                option_verbose = 0;
+                option_disable_overflow_check = !disableOverflowCheck;
+                option_use_java_frontend = !useJavaFrontend;
+                option_enforce_annotations = enforceAnnotations;
+                option_allow_should_fail = true;
+                option_emit_manifest = false;
+                option_vroots = [crt_vroot default_bindir];
+                option_allow_assume = true;
+                option_simplify_terms = !simplifyTerms;
+                option_runtime = runtime;
+                option_provides = [];
+                option_keep_provide_files = true;
+                option_include_paths = !include_paths;
+                option_safe_mode = false;
+                option_header_whitelist = [];
+              }
+              in
+              let reportExecutionForest =
+                if targetPath <> None then
+                  (fun _ -> ())
+                else
+                  (fun forest -> postProcess := (fun () -> reportExecutionForest !forest))
+              in
+              if options.option_use_java_frontend then begin
+                perform_syntax_highlighting tab tab#buffer#start_iter tab#buffer#end_iter
+              end;
+              let stats = verify_program_ext prover options path reportRange reportUseSite reportExecutionForest breakpoint true autofix targetPath in
+              let success =
+                if targetPath <> None then
+                  (msg := Some("0 errors found (target path not reached)"); false)
+                else if runToCursor then
+                  (msg := Some("0 errors found (cursor is unreachable)"); false)
+                else
+                  (msg := Some("0 errors found (" ^ (string_of_int (stats#getStmtExec)) ^ " statements verified)"); true)
+              in
+              updateMessageEntry(success);
+              
+            with
+              PreprocessorDivergence (l, emsg) ->
+              handleStaticError l ("Preprocessing error" ^ (if emsg = "" then "." else ": " ^ emsg)) None
+            | ParseException (l, emsg) ->
+              let message = "Parse error" ^ (if emsg = "" then "." else ": " ^ emsg) in
+              if (l = Ast.dummy_loc) then begin
+                msg := Some(message);
+                updateMessageEntry(false)
+              end
+              else
+                handleStaticError l message None
+            | CompilationError(emsg) ->
+              clearTrace();
+              msg := Some(emsg);
+              updateMessageEntry(false)
+            | StaticError (l, emsg, eurl) ->
+              handleStaticError l emsg eurl 
+            | SymbolicExecutionError (ctxts, phi, l, emsg, eurl) ->
+              ctxts_lifo := Some ctxts;
+              updateStepItems();
+              ignore $. updateStepListView();
+              stepSelected();
+              (* let (ass, h, env, steploc, stepmsg, locstack) = get_step_of_path (get_last_step_path()) in *)
+              begin match ctxts with
+                Executing (_, _, steploc, _)::_ when l = steploc ->
+                apply_tag_by_loc "error" l;
+                msg := Some emsg;
+                url := eurl;
+                updateMessageEntry(false)
+              | _ ->
+                handleStaticError l emsg eurl
+              end
+            | e ->
+              prerr_endline ("VeriFast internal error: \n" ^ Printexc.to_string e ^ "\n");
+              Printexc_proxy.print_backtrace stderr;
+              flush stderr;
+              GToolbox.message_box "VeriFast IDE" "Verification failed due to an internal error. See the console window for details."
+            end;
+            
+            !postProcess ()
+          end
+          
+      end; 
+      let () = 
+        match !(tab#path) with
+                None -> ()
+        |       Some (path, mtime) ->
+                        if not (close_all ()) then
+                                ignore (open_path path) in ()
+
+  in
   let verifyProgram runToCursor targetPath () =
     msg := Some("Verifying...");
     updateMessageEntry(false);
@@ -1349,7 +1462,7 @@ let show_ide initialPath prover codeFont traceFont runtime layout javaFrontend e
                   perform_syntax_highlighting tab tab#buffer#start_iter tab#buffer#end_iter
                 end
               end;
-              let stats = verify_program prover options path reportRange reportUseSite reportExecutionForest breakpoint targetPath in
+              let stats = verify_program prover options path reportRange reportUseSite reportExecutionForest breakpoint false autofix targetPath in
               let success =
                 if targetPath <> None then
                   (msg := Some("0 errors found (target path not reached)"); false)
@@ -1399,7 +1512,15 @@ let show_ide initialPath prover codeFont traceFont runtime layout javaFrontend e
             end;
             !postProcess ()
           end
-      end
+      end;
+     (*By Mahmoud: I added the folwoing let to make sure that the automatically generated modifications are updated in the GUI. I am not sure this is the best way, but I am reopening the file after each change. The problem of reloading is that after some reloads I get a segmentation errror and the GUI close by itself  *)
+    if(autofix) then
+    let () = 
+    match !(tab#path) with
+            None -> ()
+    |       Some (path, mtime) ->
+                    if not (close_all ()) then
+                            ignore (open_path path) in ()
   in
   let runShapeAnalyser () =
     (* TODO: after running the shape analyser, the undo history
@@ -1475,7 +1596,7 @@ let show_ide initialPath prover codeFont traceFont runtime layout javaFrontend e
           let px = x + cw * w / 2 in
           let py = y + cw / 2 in
           if abs (by - py) <= dotRadius && abs (bx - px) <= dotRadius then
-            verifyProgram false (Some p) ()
+            verifyProgram false (Some p) false()
         end else begin
           let rec testChildren x y ns =
             match ns with
@@ -1637,8 +1758,10 @@ let show_ide initialPath prover codeFont traceFont runtime layout javaFrontend e
   
   ignore $. (actionGroup#get_action "ClearTrace")#connect#activate clearTrace;
   ignore $. (actionGroup#get_action "Preferences")#connect#activate showPreferencesDialog;
-  ignore $. (actionGroup#get_action "VerifyProgram")#connect#activate (verifyProgram false None);
-  ignore $. (actionGroup#get_action "RunToCursor")#connect#activate (verifyProgram true None);
+  ignore $. (actionGroup#get_action "VerifyProgram")#connect#activate (verifyProgram false None false);
+  ignore $. (actionGroup#get_action "RunToCursor")#connect#activate (verifyProgram true None false);
+  ignore $. (actionGroup#get_action "GenPredicate")#connect#activate (genPredicate true None false);
+  ignore $. (actionGroup#get_action "AutoFix")#connect#activate (verifyProgram true None true);
   ignore $. (actionGroup#get_action "RunShapeAnalysis")#connect#activate runShapeAnalyser;
   ignore $. (actionGroup#get_action "Include paths")#connect#activate showIncludesDialog;
   ignore $. (actionGroup#get_action "Find file (top window)")#connect#activate (showFindFileDialog subNotebook);

@@ -3061,6 +3061,8 @@ let verify_program_core (* ?verify_program_core *)
     (reportUseSite : decl_kind -> loc -> loc -> unit)
     (reportExecutionForest : node list ref -> unit)
     (breakpoint : (string * int) option)
+    (genPredicate : bool)
+    (autofix: bool)
     (targetPath : int list option) : unit =
 
   let module VP = VerifyProgram(struct
@@ -3075,10 +3077,44 @@ let verify_program_core (* ?verify_program_core *)
     let reportUseSite = reportUseSite
     let reportExecutionForest = reportExecutionForest
     let breakpoint = breakpoint
+    let genPredicate = genPredicate
+    let autofix = autofix
     let targetPath = targetPath
   end) in
   ()
 
+  let verify_program_core_ext (* ?verify_program_core *)
+    ?(emitter_callback : package list -> unit = fun _ -> ())
+    (type typenode') (type symbol') (type termnode')  (* Explicit type parameters; new in OCaml 3.12 *)
+    (ctxt: (typenode', symbol', termnode') Proverapi.context)
+    (options : options)
+    (program_path : string)
+    (reportRange : range_kind -> loc -> unit)
+    (reportUseSite : decl_kind -> loc -> loc -> unit)
+    (reportExecutionForest : node list ref -> unit)
+    (breakpoint : (string * int) option)
+    (*The next two arguments are added by Mahmoud*)
+    (genPredicate : bool)
+    (autofix : bool)
+    (targetPath : int list option) : unit =
+
+  let module VP = VerifyProgram(struct
+    let emitter_callback = emitter_callback
+    type typenode = typenode'
+    type symbol = symbol'
+    type termnode = termnode'
+    let ctxt = ctxt
+    let options = options
+    let program_path = program_path
+    let reportRange = reportRange
+    let reportUseSite = reportUseSite
+    let reportExecutionForest = reportExecutionForest
+    let breakpoint = breakpoint
+    let genPredicate = genPredicate
+    let autofix = autofix
+    let targetPath = targetPath
+  end) in
+  ()
 (* Region: prover selection *)
 
 class virtual prover_client =
@@ -3122,15 +3158,36 @@ let verify_program (* ?verify_program *)
     (reportUseSite : decl_kind -> loc -> loc -> unit)
     (reportExecutionForest : node list ref -> unit)
     (breakpoint : (string * int) option)
+    (genPredicate: bool)
+    (autofix: bool)
     (targetPath : int list option) : Stats.stats =
   lookup_prover prover
     (object
        method run: 'typenode 'symbol 'termnode. ('typenode, 'symbol, 'termnode) Proverapi.context -> Stats.stats =
          fun ctxt -> clear_stats ();
-                     verify_program_core ~emitter_callback:emitter_callback ctxt options path reportRange reportUseSite reportExecutionForest breakpoint targetPath;
+                     verify_program_core ~emitter_callback:emitter_callback ctxt options path reportRange reportUseSite reportExecutionForest breakpoint false autofix targetPath;
                      !stats
      end)
 
+let verify_program_ext (* ?verify_program *)
+    ?(emitter_callback : package list -> unit = fun _ -> ())
+    (prover : string option)
+    (options : options)
+    (path : string)
+    (reportRange : range_kind -> loc -> unit)
+    (reportUseSite : decl_kind -> loc -> loc -> unit)
+    (reportExecutionForest : node list ref -> unit)
+    (breakpoint : (string * int) option)
+    (genPredicate: bool)
+    (autofix: bool)
+    (targetPath : int list option) : Stats.stats =
+  lookup_prover prover
+    (object
+       method run: 'typenode 'symbol 'termnode. ('typenode, 'symbol, 'termnode) Proverapi.context -> Stats.stats =
+         fun ctxt -> clear_stats ();
+                     verify_program_core_ext ~emitter_callback:emitter_callback ctxt options path reportRange reportUseSite reportExecutionForest breakpoint true autofix targetPath;
+                     !stats
+     end)
 (* Region: linker *)
 
 let remove_dups bs =

@@ -20,8 +20,13 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   
   include CheckFile_VerifyExpr(CheckFileArgs)
   
+
+  (*The following function is triggered when the user choose to generate predicate automatically*)
+  let generatePredicate = if(genPredicate) then (trial program_path) else ()
+
   (* Region: verification of statements *)
-  
+
+    
   let verify_expr readonly (pn,ilist) tparams pure leminfo funcmap sizemap tenv ghostenv h env xo e cont econt =
     verify_expr (readonly, readonly) (pn,ilist) tparams pure leminfo funcmap sizemap tenv ghostenv h env xo e cont econt
   

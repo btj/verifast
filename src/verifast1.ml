@@ -294,7 +294,7 @@ let lines_from_files filename =
 
 
 (*End*)
-	
+
 
   let pprint_context_stack cs =
     List.map
@@ -389,7 +389,7 @@ let print_context_stack_test cs =
     |   _   -> ()
 
 (*End*)
-	
+
   let assert_false h env l msg url =
     raise (SymbolicExecutionError (pprint_context_stack !contextStack, "false", l, msg, url))
   
@@ -1886,13 +1886,13 @@ let print_context_stack_test cs =
             True(_) -> ("","")
           | False(_) -> ("","")
           | Null(_) ->  ("","")
-          | Var(_,s3,_) ->  ("", s3)  (* An identifier. *)
-          | Operation(_,_,_,_) ->  ("","")
+          | Var(_,s3) ->  ("", s3)  (* An identifier. *)
+          | Operation(_,_,_) ->  ("","")
           | IntLit (_,_,_) ->  ("","")
           | RealLit(_,_) -> ("","")
           | StringLit(_,_) -> ("","")
           | ClassLit(_,_) -> ("","") (* class literal in java *)
-          | Read(_, Var(_,s2,_),s) -> (s2, s) (* lezen van een veld; hergebruiken voor java field access *)
+          | Read(_, Var(_,s2),s) -> (s2, s) (* lezen van een veld; hergebruiken voor java field access *)
           | ArrayLengthExpr(_,_) -> ("","")
           | WRead(_,_,_,_,_,_,_,_) -> ("","")
           | _ -> ("","")
@@ -1964,9 +1964,9 @@ let print_context_stack_test cs =
     
     let rec generate_body body = 
         match body with
-        |   Sep(_,PointsTo(_,Read(_, Var(_,structname,_),fieldname),VarPat(l, newgostname)),asn2) -> Name_ref(structname, fieldname, newgostname ) :: generate_body asn2
-        |   Sep(_,PredAsn(_,predref,_,[], (LitPat(Var(_,fieldname,_)):: restt)),asn2) ->  Inner_pred(predref#name, (fieldname :: print_otherpat restt)) :: generate_body asn2
-        |   PredAsn(_,predref,_, [], LitPat(Var(_,fieldname,_)):: restt) -> Inner_pred(predref#name, (fieldname :: print_otherpat restt)) :: []
+        |   Sep(_,PointsTo(_,Read(_, Var(_,structname),fieldname),VarPat(l, newgostname)),asn2) -> Name_ref(structname, fieldname, newgostname ) :: generate_body asn2
+        |   Sep(_,PredAsn(_,predref,_,[], (LitPat(Var(_,fieldname)):: restt)),asn2) ->  Inner_pred(predref#name, (fieldname :: print_otherpat restt)) :: generate_body asn2
+        |   PredAsn(_,predref,_, [], LitPat(Var(_,fieldname)):: restt) -> Inner_pred(predref#name, (fieldname :: print_otherpat restt)) :: []
         |   IfAsn(_,_,asnn1,asnn2) -> generate_body asnn2
         |   _ -> []
 

@@ -306,6 +306,8 @@ let show_ide initialPath prover codeFont traceFont runtime layout javaFrontend e
         <toolitem action='Redo' />
         <separator />
         <toolitem action='VerifyProgram' />
+        <toolitem action='GenPredicate' />
+        <toolitem action='AutoFix' />
         <toolitem action='RunToCursor' />
       </toolbar>
     </ui>

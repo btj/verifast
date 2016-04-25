@@ -38,6 +38,18 @@ type 'termnode chunk =
     chunk_info option
 type 'termnode heap = 'termnode chunk list
 type 'termnode env = (string * 'termnode) list
+
+(*Some new data structures that make it easier for Automated VeriFast*)
+type leaked_chunk = Leak_chunk of (string * string list) 
+type leaked_heap = leaked_chunk list 
+type structfieldsref = Structfields of string * string 
+type structure = Structure of string * string
+type structref = Structref of string * structfieldsref list * structure option 
+type newstructmapref = Newstructsref of structref list
+type predicate_param = (string (*Ident*) * string (*param name*)) list 
+type body = Name_ref of string (*struct name*) * string (*field name*) * string (*new name*) | Inner_pred of string (*predicate name*) * string list (*parameters name*)
+type predicate_map = (string (*Predicate Name*) * predicate_param (*predicate paramters*) * body list(*Predicate body*)) list
+
 (** Execution trace. For error reporting. *)
 type branch = LeftBranch | RightBranch
 type 'termnode context =

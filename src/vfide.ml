@@ -1411,7 +1411,7 @@ let show_ide initialPath prover codeFont traceFont runtime layout javaFrontend e
                                 ignore (open_path path) in ()
 
   in
-  let verifyProgram runToCursor targetPath () =
+  let verifyProgram runToCursor targetPath autofix () =
     msg := Some("Verifying...");
     updateMessageEntry(false);
     clearTrace();

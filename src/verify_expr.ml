@@ -179,9 +179,9 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     if h <> [] then
         (*The auto_close function is triggered when the user press auto-fix and a leak error happens. It tries to encapsulate the leak in as many predicates as possible and then include them in the post-condition*) 
         ((auto_close_stmt (check_leak_existance h env) l env); 
-        (assert_false h env l msg (Some "leak")));
-        check_breakpoint [] env l;
-        SymExecSuccess
+        assert_false h env l msg (Some "leak"));
+    check_breakpoint [] env l;
+    SymExecSuccess
   
   let check_func_header_compat l msg env00 (k, tparams, rt, xmap, nonghost_callers_only, pre, post, epost, terminates) (k0, tparams0, rt0, xmap0, nonghost_callers_only0, tpenv0, cenv0, pre0, post0, epost0, terminates0) =
     if k <> k0 then 

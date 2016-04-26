@@ -212,7 +212,7 @@ let missing_heap msg =
 let print_missing_heap msg oc=
     output_string_file oc msg; flush oc
 
-let new_post_cond line = String.sub line 0 (String.index line ';')
+let new_post_cond line =String.sub line 0 (try (String.index line ';') with Not_found -> String.length line) 
 
 let new_pre_cond line = String.sub line 0 (String.index line ';')
 
@@ -227,24 +227,15 @@ open Printf
 
 (*Any function starts with externalprint means that it modifies the .c file that is being verified*)
 
-let externalprint_post file_lines file leaked_h line_no= 
+let externalprint_post file_lines file leaked_h line_no= printnow "%i \n" line_no;
 let oc = open_out file in
     let rec modify i file_lines =     
         match file_lines with
-           | line :: [] -> 
-                if (line = "\n") then 
-                    (output_string_file oc "\n") 
-                else (if(i = line_no) then 
-                    (output_string_file oc (new_post_cond line); add_new_post leaked_h oc; output_string_file oc "\n") 
-                else 
-                    (output_string_file oc line; output_string_file oc "\n"))
-           | line :: nextline -> 
-                if (line = "\n") then 
-                    (output_string_file oc "\n"; modify (succ i) nextline) 
-                else (if (i = line_no) then 
-                    (output_string_file oc (new_post_cond line); add_new_post leaked_h oc; output_string_file oc "\n"; modify (succ i) nextline) 
-                else (output_string_file oc line; output_string_file oc "\n"; modify (succ i) nextline))
            | [] -> close_out oc;
+           | line :: nextline -> printnow "%s %i %i %s \n" " i is " i line_no line;
+                if (i = line_no) then 
+                    (output_string_file oc (new_post_cond line); add_new_post leaked_h oc; output_string_file oc "\n"; modify (succ i) nextline) 
+                else (output_string_file oc line; output_string_file oc "\n"; modify (succ i) nextline)        
    in modify 1 file_lines
            
            
@@ -325,7 +316,8 @@ let lines_from_files filename =
     List.map
       (function
          Assuming t -> 0
-       | Executing (h, env, l, msg) ->   (match msg with
+       | Executing (h, env, l, msg) ->   
+            (match msg with
                 "Consuming assertion" -> 
                     (match l with
                          ((s, r, col), (s1, r1, col1)) -> kfprintf (fun _ -> flush stdout) stdout "%i " r; r) 
@@ -361,7 +353,7 @@ let line_no l =
 (*By Mahmoud: this is really a bad idea, but I don't have any clue now, so I will improve it later*)
 let rec determine_no list_of_nos = 
     match list_of_nos with
-        x :: [] -> if (x > 0) then x else 0
+        x :: [] -> printnow "%s %i \n" "Inside determine_no" x; if (x > 0) then x else 0
        |x :: y :: z  -> if (x > y) then (determine_no (x :: z)) else (determine_no (y :: z)) 
 
 
@@ -2179,7 +2171,7 @@ let print_context_stack_test cs =
         (output_string_file oc "//The following predicates are auto generated \n"; flush oc; output_string_file oc "/*@ \n"; flush oc;
         let rec iter newstructmap =
             match newstructmap with 
-             [] -> output_string_file oc "@*/ \n"; flush oc
+             [] -> output_string_file oc "@*/"; output_string_file oc "\n"; 
         |    Structref(structname, fields, structure) :: nextnewstructmap -> output_string_file oc "\n"; flush oc; output_string_file oc "predicate";output_string_file oc " "; output_string_file oc structname; flush oc; print_predicate_parameters structname fields autogenmap structure oc; iter nextnewstructmap
         in iter newstructmap)
    else output_string_file oc "Errrrrrrrrrrrrrrrrrrrrrrrror"
@@ -2190,29 +2182,18 @@ let externalprint_predicates file_lines file line_no =
  let oc = open_out file in
     let rec modify i file_lines =
         match file_lines with
-            |line :: [] -> if (line = "\n") then (output_string_file oc "\n"; flush oc) else (if(i = line_no) then ((generate_predicate (autgendeclmap) oc (check_struct_structure (create_new_struct_map []))); output_string_file oc "\n"; flush oc) else (output_string_file oc line; output_string_file oc "\n"; flush oc))
-            | line :: nextline -> if (line = "\n") then (output_string_file oc "\n"; flush oc; modify (succ i) nextline) else (if (i = line_no) then ((generate_predicate (autgendeclmap) oc (check_struct_structure (create_new_struct_map []))); flush oc; output_string_file oc "\n"; flush oc; output_string_file oc line; modify (succ i) nextline) else (output_string_file oc line; output_string_file oc "\n"; flush oc; modify (succ i) nextline))
-           | [] -> close_out oc;
+              [] -> close_out oc;            
+            | line :: nextline -> 
+                if (i = line_no) then begin
+                    begin generate_predicate (autgendeclmap) oc (check_struct_structure (create_new_struct_map [])) end; 
+                    output_string_file oc "\n"; 
+                    output_string_file oc line; 
+                    modify (succ i) nextline end 
+                else begin
+                    output_string_file oc line; 
+                    output_string_file oc "\n"; 
+                    modify (succ i) nextline end
            in modify 1 file_lines
-
-  
-  let print_predicatemap predicatemap=
-    let rec iter predicatemap=
-        match predicatemap with 
-            [] -> ()
-        |   (name, parameter, body) :: predicaterest -> kfprintf (fun _ -> flush stdout) stdout "Name: %s %s" name " - "; 
-                let rec iterbody body =
-                    match body with
-                    |   [] -> ()
-                    |   Name_ref(s1, s2, s3) :: rest ->   kfprintf (fun _ -> flush stdout) stdout "Fuzz: %s %s %s" s1 s2 s3; iterbody rest
-                    |   Inner_pred(s1, s2::[]) :: rest -> (kfprintf (fun _ -> flush stdout) stdout "Fuzz: %s %s " s1 s2)
-                in iterbody body; iter predicaterest                
-    in iter predicatemap 
-  
-  let rec print_leaked_heap_test l_heap =
-        match l_heap with 
-                [] -> kfprintf (fun _ -> flush stdout) stdout "Leeaaak: %s %s" "No more leaks" "\n"
-        |       Leak_chunk(name, parameters) :: rest -> ((kfprintf (fun _ -> flush stdout) stdout "Leeaak: %s %s" name "\n"); print_leaked_heap_test rest)
   
   let rec check_existance_heap predicate_body l_heap = 
     match l_heap with
@@ -2404,7 +2385,7 @@ let rec auto_close_stmt heap_leak l env=
             ((s, r, col), (s1, r1, col1)) ->
                 match (auto_close_predicate heap_leak (print_predicates)) with
                     "The leaked heap cann't be encapsulated into predicate" ->
-                        externalprint_post (lines_from_files s) s (filter_lheap (check_leaked_returned_value env heap_leak) (print_predicates))  (determine_no (search_context_stack_post !contextStack)) 
+                         externalprint_post (lines_from_files s) s (filter_lheap (check_leaked_returned_value env heap_leak) (print_predicates))  (determine_no (search_context_stack_post !contextStack)) 
                 |   predicatename -> 
                         (auto_close_stmt (((Leak_chunk(predicatename, ((check_local_name (malloc_name heap_leak predicatename) env) :: (check_other_predicate_parameters predicatename (print_predicates))))) :: remove_dummy_leaks(update_leak heap_leak predicatename (print_predicates)))) l env)
     
@@ -2465,7 +2446,7 @@ let rec test_print_assumptions assumptions_list =
     
     
 let rec solve_assump_equations assumptions_list infered_count (counter: int) =
-    printnow "%s \n" infered_count;
+    (*printnow "%s \n" infered_count;*)
     match assumptions_list with
         [] -> (Printf.sprintf "%s%s%i" infered_count "-" counter)
     |   (left, right, value) :: partial_assumptions_list ->
@@ -2546,7 +2527,7 @@ let rec parameters_list parameters row =
 let rec parameters_list0 parameters row =
     match parameters with
         [] -> []
-    |   x :: parameters -> printnow "%s: %s \n" "I am printing x" x;
+    |   x :: parameters -> (*printnow "%s: %s \n" "I am printing x" x;*)
             if((try(Str.search_forward (Str.regexp "count") x 0) with Not_found -> -1) > -1) then
                 ((check_infered_conut x !contextStack row) :: (parameters_list0 parameters row))
             else

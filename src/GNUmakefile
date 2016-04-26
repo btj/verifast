@@ -1,6 +1,6 @@
 # Builds VeriFast itself. Does *not* build dependencies like lablgtk,ocaml,...
 
-all: build test
+all: build 
 .PHONY: all
 
 #------------------------------- Help ---------------------------------------#
@@ -371,7 +371,7 @@ clean::
 vfide.cmx: Fonts.cmx vfide.ml $(GTKSOURCEVIEW_DEPS)
 	@echo "  OCAMLOPT " $@
 ifndef WITHOUT_GTKSOURCEVIEW
-	make -C linemarks OCAMLOPT=${OCAMLOPT} OCAMLCFLAGS="${OCAMLCFLAGS}" LABLGTK_FLAGS="$(LABLGTK_FLAGS_)" linemarks.cmxa
+	make -C linemarks OCAMLOPT=${OCAMLOPT} LABLGTK_FLAGS="$(LABLGTK_FLAGS_)" linemarks.cmxa
 endif
 	$(SET_LDD); $(OCAMLOPT) $(OCAMLCFLAGS) -thread -c -w p -warn-error FSU -c $(INCLUDES) \
 	-pp ${CAMLP4O} nums.cmxa $(LABLGTK_FLAGS) $(GTKSOURCEVIEW_LFLAGS) vfide.ml
@@ -460,7 +460,7 @@ testsuite: $(STDLIB) $(TOOLS_EXCEPT_VFIDE)
 assignment_tests: $(STDLIB) $(TOOLS_EXCEPT_VFIDE)
 	@echo "  MYSH     " assignments/run_model_solutions
 	$(SET_ENV); \
-        if [ -d ../assignments ]; then cd ../assignments; ../bin/mysh -cpus $(NUMCPU) < run_model_solutions.mysh; fi
+        cd ../assignments; ../bin/mysh -cpus $(NUMCPU) < run_model_solutions.mysh
 .PHONY: assignment_tests
 
 # Do not run the test targets in parallel because of GNU Make bug:

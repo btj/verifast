@@ -22,11 +22,6 @@ Automated VeriFast
  
  \* iMinds-DistriNet research group, Department of Computer Science, KU Leuven - University of Leuven, Belgium
  
- Automated VeriFast can be
- considered as an extension to VeriFast where some functionalities have been added to automatically
- generate predicates and infer function pre/post-conditions. In addition, it can automatically infer the
- inline annotations, such as some of the open commands.
- 
  Automated VeriFast can be considered as an extension to VeriFast where some functionalities have been added to automatically generate predicates and infer function pre/post-conditions. In addition, it can automatically infer some of the inline annotations, such as some of the open commands. Automated VeriFast is an automation layer that exists on top of VeriFast. This automation layer doesn't not affect the verification process in any way, but on the other hand, it takes the output of the verification, in case of errors, and tries to infer some annotations that would solve this error. The interface of Automated VeriFast is the same as the normal VeriFast with two more buttons added. One button is for generating predicates and the other one for fixing the error. 
  
  Automated VeriFast source code and binaries are released under the [MIT license](LICENSE.md).

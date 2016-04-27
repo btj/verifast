@@ -1807,14 +1807,12 @@ let print_context_stack_test cs =
           | Void -> "Void"
           | Int(s,i) -> "Int"
           | UShortType -> "UShort"
-          | ShortType -> "Short"
           | UintPtrType -> "Other"  (* The uintptr_t type from the C99 standard. It's an integer type big enough to hold a pointer value. *)
           | RealType -> "Other"  (* Mathematical real numbers. Used for fractional permission coefficients. Also used for reasoning about floating-point code. *)
           | Float -> "Float"
           | Double -> "Double"
           | LongDouble -> "LongDouble"
           | UChar -> "UChar"
-          | Char -> "Char"
           | StructType(s) -> "String"
           | PtrType(t) -> "Other"
           | FuncType(s) -> "Other"   (* The name of a typedef whose body is a C function type. *)

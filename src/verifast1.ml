@@ -1778,20 +1778,6 @@ let print_context_stack_test cs =
         None -> ()
     |   Some v -> (kfprintf (fun _ -> flush stdout) stdout "3333: %s4444, " v)
   
- 
-
- (* let print_predicates =
-    let rec iter predicatefamily ds =
-        match ds with 
-            [] -> ()
-        |   PredFamilyInstanceDecl(_,name, _, _, fields, body) :: ds -> (name, (generate_param fields), generate_body body);(kfprintf (fun _ -> flush stdout) stdout "\n 111111%s22222:" name); print_predicate_param fields; iter predicatefamily ds
-        |   _ :: ds -> iter predicatefamily ds
-    in
-    match ps with
-      [PackageDecl(_,"",[],ds)] -> iter [] ds
-    | _ when file_type path=Java -> ()
-                       *)
- 
   
   let check_fields fds_opt =
     match fds_opt with
@@ -1956,35 +1942,16 @@ let print_context_stack_test cs =
     
     let rec generate_body body = 
         match body with
-        |   Sep(_,PointsTo(_,Read(_, Var(_,structname),fieldname),VarPat(l, newgostname)),asn2) -> Name_ref(structname, fieldname, newgostname ) :: generate_body asn2
-        |   Sep(_,PredAsn(_,predref,_,[], (LitPat(Var(_,fieldname)):: restt)),asn2) ->  Inner_pred(predref#name, (fieldname :: print_otherpat restt)) :: generate_body asn2
-        |   PredAsn(_,predref,_, [], LitPat(Var(_,fieldname)):: restt) -> Inner_pred(predref#name, (fieldname :: print_otherpat restt)) :: []
-        |   IfAsn(_,_,asnn1,asnn2) -> generate_body asnn2
+        |   Sep(_,PointsTo(_,Read(_, Var(_,structname),fieldname),VarPat(l, newgostname)),asn2) -> 
+                Name_ref(structname, fieldname, newgostname ) :: generate_body asn2
+        |   Sep(_,PredAsn(_,predref,_,[], (LitPat(Var(_,fieldname)):: restt)),asn2) ->  
+                Inner_pred(predref#name, (fieldname :: print_otherpat restt)) :: generate_body asn2
+        |   PredAsn(_,predref,_, [], LitPat(Var(_,fieldname)):: restt) -> 
+                Inner_pred(predref#name, (fieldname :: print_otherpat restt)) :: []
+        |   IfAsn(_,_,asnn1,asnn2) -> 
+                generate_body asnn2
         |   _ -> []
 
- 
- 
- 
-  (*          
-    let rec generate_body body = 
-    match body with
-    |   InstPredAsn(l, expr, name, expr1, _) -> (kfprintf (fun _ -> flush stdout) stdout "I am here: %s \n" name); ("","","")
-    |   PredAsn(_,_,_,_,_) -> (kfprintf (fun _ -> flush stdout) stdout "I am here: %s \n" "Type 2"); ("","","")
-    |   WPredAsn(_,_,_,_,_,_) -> (kfprintf (fun _ -> flush stdout) stdout "I am here: %s \n" "Type 3"); ("","","")
-    |   WInstPredAsn(_,_,_,_,_,_,_,_) -> (kfprintf (fun _ -> flush stdout) stdout "I am here: %s \n" "Type 4"); ("","","")
-    |   PointsTo(_,expr1,pat) ->   (kfprintf (fun _ -> flush stdout) stdout "I am here: %s \n" "Type 5"); ((print_exp expr1), (print_pat pat))
-    |   WPointsTo(_,_,_,_) -> (kfprintf (fun _ -> flush stdout) stdout "I am here: %s \n" "Type 6"); ("","","")
-    |   ExprAsn(_,_) -> (kfprintf (fun _ -> flush stdout) stdout "I am here: %s \n" "Type 7"); ("","","")
-    |   Sep(_,asn1,asn2) -> (kfprintf (fun _ -> flush stdout) stdout "I am here: %s \n" "Type 8"); generate_body asn1 :: generate_body asn2
-    |   CoefAsn(_,_,_) -> (kfprintf (fun _ -> flush stdout) stdout "I am here: %s \n" "Type 9"); ("","","")
-    |   PluginAsn(_,_) -> (kfprintf (fun _ -> flush stdout) stdout "I am here: %s \n" "Type 10"); ("","","")
-    |   WPluginAsn(_,_,_) -> (kfprintf (fun _ -> flush stdout) stdout "I am here: %s \n" "Type 11"); ("","","")
-    |   EnsuresAsn(_,_) -> (kfprintf (fun _ -> flush stdout) stdout "I am here: %s \n" "Type 13"); ("","","")
-    |   MatchAsn(_,_,_) -> (kfprintf (fun _ -> flush stdout) stdout "I am here: %s \n" "Type 14"); ("","","")
-    |   WMatchAsn(_,_,_,_) -> (kfprintf (fun _ -> flush stdout) stdout "I am here: %s \n" "Type 15"); ("","","") 
-    |   IfAsn(_,_,asnn1,asnn2) -> (kfprintf (fun _ -> flush stdout) stdout "I am here: %s \n" "Type 16"); generate_body asnn1 :: generate_body asnn2
-    |   _ -> (kfprintf (fun _ -> flush stdout) stdout "I am here: %s \n" "Not this type"); ("","","")
-*)
  
   let rec generate_param fields =
     match fields with
@@ -1992,47 +1959,22 @@ let print_context_stack_test cs =
     |   (t, name) :: fields -> (checkfieldtype t, name) :: generate_param fields 
   
   let print_predicates =
-    if(autofix) then begin
-    let rec iter predicatefamily ds =
-        match ds with 
-            [] -> []
-        |   PredFamilyInstanceDecl(_,name, _, _, fields, body) :: ds -> (*((name, (generate_param fields),*) (name, (generate_param fields), (generate_body body)) :: (iter predicatefamily ds) (*) :: iter predicatefamily ds)*)
-        |   _ :: ds -> iter predicatefamily ds
-    in
-    match ps with
-      [PackageDecl(_,"",[],ds)] -> iter [] ds
-    | _ when file_type path=Java -> []
-    end
+    if(autofix) then 
+        begin
+        let rec iter predicatefamily ds =
+            match ds with 
+                [] -> []
+            |   PredFamilyInstanceDecl(_,name, _, _, fields, body) :: ds -> 
+                    (name, (generate_param fields), (generate_body body)) :: (iter predicatefamily ds) 
+            |   _ :: ds -> iter predicatefamily ds
+        in
+        match ps with
+            [PackageDecl(_,"",[],ds)] -> iter [] ds
+        | _ when file_type path=Java -> []
+        end
     else
     []
 
-(*  let check_precondition parametername loc =
-    let rec iter ds =
-        match ds with
-            [] -> "Error not other parameter found"
-        |   ExprAsn(((s, l1, l2),(s1, l3, l4)),expr) :: ds -> 
-                (if(l1 = loc) then
-                    match expr with
-                        True(_) -> (kfprintf (fun _ -> flush stdout) stdout "Inside Expr: %s \n" "T1111")
-                      | False(_) -> (kfprintf (fun _ -> flush stdout) stdout "Inside Expr: %s \n" "T2222")
-                      | Null(_) -> (kfprintf (fun _ -> flush stdout) stdout "Inside Expr: %s \n" "T3333")
-                      | Var(_,s3,_) -> (kfprintf (fun _ -> flush stdout) stdout "Inside Expr: %s \n" s3) (* An identifier. *)
-                      | Operation(_,_,_,_) -> (kfprintf (fun _ -> flush stdout) stdout "Inside Expr: %s \n" "T55555555555")
-                      | IntLit (_,_,_) -> (kfprintf (fun _ -> flush stdout) stdout "Inside Expr: %s \n" "Typeeeee 66666666666666666")
-                      | RealLit(_,_) -> (kfprintf (fun _ -> flush stdout) stdout "Inside Expr: %s \n" "Typeeeee 7777777777777777777")
-                      | StringLit(_,_) -> (kfprintf (fun _ -> flush stdout) stdout "Inside Expr: %s \n" "Typeeeee 888888888888")
-                      | ClassLit(_,_) ->  (kfprintf (fun _ -> flush stdout) stdout "Inside Expr: %s \n" "Typeeeee 99999999999") (* class literal in java *)
-                      | Read(_, Var(_,s2,_),s) ->  (kfprintf (fun _ -> flush stdout) stdout "Inside Expr: %s \n" s) (* lezen van een veld; hergebruiken voor java field access *)
-                      | ArrayLengthExpr(_,_) ->(kfprintf (fun _ -> flush stdout) stdout "Inside Expr: %s \n" "Typeeeee 11111")
-                      | WRead(_,_,_,_,_,_,_,_) -> (kfprintf (fun _ -> flush stdout) stdout "Inside Expr: %s \n" "Typeeeee 1222222222222")
-                      | _ -> (kfprintf (fun _ -> flush stdout) stdout "Inside Expr: %s \n" "Typeeeee 13")); ""
-   in
-    match ps with
-      [PackageDecl(_,"",[],ds)] -> iter ds
-    | _ when file_type path=Java -> []
-                                            
-  *)
-  
   let rec print_predicates_test print_predicates =
     match print_predicates with
         [] -> ()
@@ -2072,39 +2014,35 @@ let print_context_stack_test cs =
                     else 
                         (iter fieldsrest)
             in iter allfields
-   (* in check_struct_structure (create_new_struct_map []) *)
-        
-                    
-
+                            
   let rec print_struct_fields fields =
     match fields with
         [] -> ()
-    |   Structfields(iden, fieldname) :: nextfields -> kfprintf (fun _ -> flush stdout) stdout "Field name: %s %s %s %s" fieldname " : " iden "\n"; print_struct_fields nextfields
+    |   Structfields(iden, fieldname) :: nextfields -> 
+            print_struct_fields nextfields  
+  
 
-  let print_new_struct_map newstmp=
-    let rec iter newstmp =
-        match newstmp with
-            [] -> kfprintf (fun _ -> flush stdout) stdout "String: %s" "No more structs. \n"
-        |   Structref(name, fields, x) :: nextstructs -> kfprintf (fun _ -> flush stdout) stdout "Strut name: %s %s" name " : "; print_struct_fields fields; 
-                (if (x = None) then  kfprintf (fun _ -> flush stdout) stdout " %s" "Not a linkedlist" else  kfprintf (fun _ -> flush stdout) stdout "%s" " A linkedlist"); 
-                iter nextstructs
-    in iter newstmp
-  
- (* let () = print_new_struct_map (check_struct_structure (create_new_struct_map [])) *)
-  
-  
-  
-  
   let rec print_all_fields structname fields oc =
     match fields with
-        [] -> output_string_file oc " &*& malloc_block_"; output_string_file oc structname; output_string_file oc "("; output_string_file oc structname;output_string_file oc ") " 
+        [] -> 
+            output_string_file oc " &*& malloc_block_"; 
+            output_string_file oc structname; 
+            output_string_file oc "("; 
+            output_string_file oc structname;
+            output_string_file oc ") " 
     |   Structfields(iden, fieldname) :: fields -> 
-            output_string_file oc structname; output_string_file oc "->"; output_string_file oc fieldname; output_string_file oc " |-> ?"; output_string_file oc fieldname; 
-            (if(fields <> []) then
+            output_string_file oc structname; 
+            output_string_file oc "->"; 
+            output_string_file oc fieldname; 
+            output_string_file oc " |-> ?"; 
+            output_string_file oc fieldname; 
+            begin
+            if(fields <> []) then
                 output_string_file oc " &*& "
             else
-                ());
-        print_all_fields structname fields oc
+                ()
+            end;
+            print_all_fields structname fields oc
   
   let rec find_fieldname fields y oc =
     match fields with
@@ -2122,7 +2060,14 @@ let print_context_stack_test cs =
         [] -> ()
     |   Autogen(x, y) :: autogenmap -> 
             if(x = structname) then 
-                (output_string_file oc "&*& "; output_string_file oc y; output_string_file oc "("; output_string_file oc (find_fieldname fields y oc); output_string_file oc ", count)";   (print_autogen_fields structname fields autogenmap oc))
+                begin
+                output_string_file oc "&*& "; 
+                output_string_file oc y; 
+                output_string_file oc "("; 
+                output_string_file oc (find_fieldname fields y oc); 
+                output_string_file oc ", count)";   
+                (print_autogen_fields structname fields autogenmap oc)
+                end
             else 
                 (print_autogen_fields structname fields autogenmap oc)
   
@@ -2131,69 +2076,95 @@ let print_context_stack_test cs =
   let rec check_contain_llist autogenmap structname oc flag=
     match autogenmap with
         [] -> 
-                if(flag = 0) then
-                        output_string_file oc ";) = \n"
-                else
-                        output_string_file oc "; \n"
-    |   Autogen(x, y) :: autogenmap -> printnow "%s \n" x; 
-            if(x = structname) then begin
-                if (flag = 0) then begin
-                    (output_string_file oc "; int count) = \n")
-                end
+            if(flag = 0) then
+               output_string_file oc ";) = \n"
+            else
+               output_string_file oc "; \n"
+    |   Autogen(x, y) :: autogenmap -> 
+            printnow "%s \n" x; 
+                if(x = structname) then 
+                    begin
+                    if (flag = 0) then 
+                        begin
+                        (output_string_file oc "; int count) = \n")
+                        end
+                    else 
+                        (output_string_file oc " &*& count >= 0; \n")
+                    end
                 else 
-                    (output_string_file oc " &*& count >= 0; \n")
-            end
-            else 
-                check_contain_llist autogenmap structname oc flag
+                    check_contain_llist autogenmap structname oc flag
   
                 
   let print_inner_structure structname structure autogenmap oc =
     match structure with
-        Some (Structure (x, "Linkedlist")) -> output_string_file oc " &*& "; output_string_file oc structname; output_string_file oc "("; output_string_file oc x; output_string_file oc ", ?count1) &*& count == count1 + 1 &*& count > 0; \n"
-    |   None -> (check_contain_llist autogenmap structname oc 1)
+        Some (Structure (x, "Linkedlist")) -> 
+            output_string_file oc " &*& "; 
+            output_string_file oc structname; 
+            output_string_file oc "("; 
+            output_string_file oc x; 
+            output_string_file oc ", ?count1) &*& count == count1 + 1 &*& count > 0; \n"
+    |   None -> 
+            (check_contain_llist autogenmap structname oc 1)
   
   let print_predicate_body structname fields autogenmap structure oc = 
-    print_all_fields structname fields oc; print_autogen_fields structname fields autogenmap oc; print_inner_structure structname structure autogenmap oc
+    print_all_fields structname fields oc; 
+    print_autogen_fields structname fields autogenmap oc; 
+    print_inner_structure structname structure autogenmap oc
     
 
   
   let print_predicate_parameters structname fields autogenmap structure oc = 
-   output_string_file oc " (struct "; output_string_file oc structname; output_string_file oc " *"; output_string_file oc structname; 
+    output_string_file oc " (struct "; 
+    output_string_file oc structname; 
+    output_string_file oc " *"; 
+    output_string_file oc structname; 
     match structure with
-        Some (Structure(_, "Linkedlist")) ->  output_string_file oc "; int count) = \n "; output_string_file oc structname; output_string_file oc " == 0 ? count == 0 : "; print_predicate_body structname fields autogenmap structure oc
-    |   None ->  (check_contain_llist autogenmap structname oc 0);
-    print_predicate_body structname fields autogenmap structure oc
+        Some (Structure(_, "Linkedlist")) ->  
+            output_string_file oc "; int count) = \n "; 
+            output_string_file oc structname; 
+            output_string_file oc " == 0 ? count == 0 : "; 
+            print_predicate_body structname fields autogenmap structure oc
+    |   None ->   
+            (check_contain_llist autogenmap structname oc 0);
+            print_predicate_body structname fields autogenmap structure oc
             
    
   
   let generate_predicate autogenmap oc newstructmap = 
-    if(newstructmap <> []) then
-        (output_string_file oc "//The following predicates are auto generated \n"; flush oc; output_string_file oc "/*@ \n"; flush oc;
+    if(newstructmap <> []) then begin
+        output_string_file oc "//The following predicates are auto generated \n"; 
+        output_string_file oc "/*@ \n";
         let rec iter newstructmap =
             match newstructmap with 
-             [] -> output_string_file oc "@*/"; output_string_file oc "\n"; 
-        |    Structref(structname, fields, structure) :: nextnewstructmap -> output_string_file oc "\n"; flush oc; output_string_file oc "predicate";output_string_file oc " "; output_string_file oc structname; flush oc; print_predicate_parameters structname fields autogenmap structure oc; iter nextnewstructmap
-        in iter newstructmap)
-   else output_string_file oc "Errrrrrrrrrrrrrrrrrrrrrrrror"
+             [] -> 
+                output_string_file oc "@*/"; 
+                output_string_file oc "\n"; 
+        |    Structref(structname, fields, structure) :: nextnewstructmap -> 
+                output_string_file oc "\n"; 
+                output_string_file oc "predicate";
+                output_string_file oc " "; 
+                output_string_file oc structname; 
+                print_predicate_parameters structname fields autogenmap structure oc; 
+                iter nextnewstructmap
+        in iter newstructmap end
+   else output_string_file oc "//Something Wrong happened while generating predicates"      
        
-       
-       
-let externalprint_predicates file_lines file line_no =
- let oc = open_out file in
-    let rec modify i file_lines =
-        match file_lines with
-              [] -> close_out oc;            
-            | line :: nextline -> 
-                if (i = line_no) then begin
-                    begin generate_predicate (autgendeclmap) oc (check_struct_structure (create_new_struct_map [])) end; 
-                    output_string_file oc "\n"; 
-                    output_string_file oc line; 
-                    modify (succ i) nextline end 
-                else begin
-                    output_string_file oc line; 
-                    output_string_file oc "\n"; 
-                    modify (succ i) nextline end
-           in modify 1 file_lines
+  let externalprint_predicates file_lines file line_no =
+   let oc = open_out file in
+      let rec modify i file_lines =
+          match file_lines with
+                [] -> close_out oc;            
+              | line :: nextline -> 
+                  if (i = line_no) then begin
+                      begin generate_predicate (autgendeclmap) oc (check_struct_structure (create_new_struct_map [])) end; 
+                      output_string_file oc "\n"; 
+                      output_string_file oc line; 
+                      modify (succ i) nextline end 
+                  else begin
+                      output_string_file oc line; 
+                      output_string_file oc "\n"; 
+                      modify (succ i) nextline end
+             in modify 1 file_lines
   
   let rec check_existance_heap predicate_body l_heap = 
     match l_heap with
@@ -2204,18 +2175,15 @@ let externalprint_predicates file_lines file line_no =
                     if(name = (String.concat  "_" (structname :: fieldname :: []) )) 
                         then true 
                         else check_existance_heap predicate_body rest_heap
-            |   Inner_pred (innerpredicatename, paramters) -> true
-
-           
+            |   Inner_pred (innerpredicatename, paramters) -> true         
            
 let rec consume_leak_intopredicate l_heap predicatebody =
     match predicatebody with
         [] -> true
-        (*There is a mistake in the comming line that I will ignore now for simplicity, but I have to reconsider this function action. The l_heap need to be updated if the check existance_heap function returned true*)
-    |   bodyfirst :: bodyrest -> if(check_existance_heap bodyfirst l_heap) then consume_leak_intopredicate l_heap bodyrest else false
-    
-
-
+    |   bodyfirst :: bodyrest -> 
+            if(check_existance_heap bodyfirst l_heap) then 
+                consume_leak_intopredicate l_heap bodyrest 
+            else false
 
 let rec return_encapspredicate predicatename (predmap: predicate_map) =
     match predmap with
@@ -2223,8 +2191,6 @@ let rec return_encapspredicate predicatename (predmap: predicate_map) =
             if(predicatename = predname)
                 then (predname, predicateparam, predicatebody)
                 else return_encapspredicate predicatename predmap
-
-
 
 let remove_encapsulated_chunk predbody l_chunk chunkname =
     let rec iter predbody =

@@ -1306,7 +1306,7 @@ let show_ide initialPath prover codeFont traceFont runtime layout javaFrontend e
         Some (path, insert_line + 1)
     end
   in
-  let genPredicate runToCursor targetPath autofix ()  =
+  (*let genPredicate runToCursor targetPath ()  =
     msg := Some("Verifying...");
     updateMessageEntry(false);
     clearTrace();
@@ -1351,7 +1351,7 @@ let show_ide initialPath prover codeFont traceFont runtime layout javaFrontend e
               if options.option_use_java_frontend then begin
                 perform_syntax_highlighting tab tab#buffer#start_iter tab#buffer#end_iter
               end;
-              let stats = verify_program_ext prover options path reportRange reportUseSite reportExecutionForest breakpoint true autofix targetPath in
+              let stats = verify_program prover options path reportRange reportUseSite reportExecutionForest breakpoint true false targetPath in
               let success =
                 if targetPath <> None then
                   (msg := Some("0 errors found (target path not reached)"); false)
@@ -1404,16 +1404,15 @@ let show_ide initialPath prover codeFont traceFont runtime layout javaFrontend e
             !postProcess ()
           end
           
-      end; 
-      let () = 
-        match !(tab#path) with
-                None -> ()
-        |       Some (path, mtime) ->
-                        if not (close_all ()) then
-                                ignore (open_path path) in ()
-
-  in
-  let verifyProgram runToCursor targetPath autofix () =
+      end;
+  let () = 
+    match !(tab#path) with
+            None -> ()
+    |       Some (path, mtime) ->
+                    if not (close_all ()) then
+                            ignore (open_path path) in ()
+  in*)
+  let verifyProgram runToCursor targetPath autofix genPredicate () =
     msg := Some("Verifying...");
     updateMessageEntry(false);
     clearTrace();
@@ -1426,9 +1425,11 @@ let show_ide initialPath prover codeFont traceFont runtime layout javaFrontend e
         | Some path ->
           clearSyntaxHighlighting();
           if not (List.exists sync_with_disk tabs) then
-          begin
+          begin  
             let breakpoint =
-              if runToCursor then
+              if genPredicate then
+                 Some (path, -1)  
+              else if runToCursor then
                 getCursor ()
               else
                 None
@@ -1464,7 +1465,7 @@ let show_ide initialPath prover codeFont traceFont runtime layout javaFrontend e
                   perform_syntax_highlighting tab tab#buffer#start_iter tab#buffer#end_iter
                 end
               end;
-              let stats = verify_program prover options path reportRange reportUseSite reportExecutionForest breakpoint false autofix targetPath in
+              let stats = verify_program prover options path reportRange reportUseSite reportExecutionForest breakpoint genPredicate autofix targetPath in
               let success =
                 if targetPath <> None then
                   (msg := Some("0 errors found (target path not reached)"); false)
@@ -1516,7 +1517,7 @@ let show_ide initialPath prover codeFont traceFont runtime layout javaFrontend e
           end
       end;
      (*By Mahmoud: I added the folwoing let to make sure that the automatically generated modifications are updated in the GUI. I am not sure this is the best way, but I am reopening the file after each change. The problem of reloading is that after some reloads I get a segmentation errror and the GUI close by itself  *)
-    if(autofix) then
+    if(autofix || genPredicate) then
     let () = 
     match !(tab#path) with
             None -> ()
@@ -1598,7 +1599,7 @@ let show_ide initialPath prover codeFont traceFont runtime layout javaFrontend e
           let px = x + cw * w / 2 in
           let py = y + cw / 2 in
           if abs (by - py) <= dotRadius && abs (bx - px) <= dotRadius then
-            verifyProgram false (Some p) false()
+            verifyProgram false (Some p) false false()
         end else begin
           let rec testChildren x y ns =
             match ns with
@@ -1760,10 +1761,10 @@ let show_ide initialPath prover codeFont traceFont runtime layout javaFrontend e
   
   ignore $. (actionGroup#get_action "ClearTrace")#connect#activate clearTrace;
   ignore $. (actionGroup#get_action "Preferences")#connect#activate showPreferencesDialog;
-  ignore $. (actionGroup#get_action "VerifyProgram")#connect#activate (verifyProgram false None false);
-  ignore $. (actionGroup#get_action "RunToCursor")#connect#activate (verifyProgram true None false);
-  ignore $. (actionGroup#get_action "GenPredicate")#connect#activate (genPredicate true None false);
-  ignore $. (actionGroup#get_action "AutoFix")#connect#activate (verifyProgram true None true);
+  ignore $. (actionGroup#get_action "VerifyProgram")#connect#activate (verifyProgram false None false false);
+  ignore $. (actionGroup#get_action "RunToCursor")#connect#activate (verifyProgram true None false false);
+  ignore $. (actionGroup#get_action "GenPredicate")#connect#activate (verifyProgram false None false true);
+  ignore $. (actionGroup#get_action "AutoFix")#connect#activate (verifyProgram false None true false);
   ignore $. (actionGroup#get_action "RunShapeAnalysis")#connect#activate runShapeAnalyser;
   ignore $. (actionGroup#get_action "Include paths")#connect#activate showIncludesDialog;
   ignore $. (actionGroup#get_action "Find file (top window)")#connect#activate (showFindFileDialog subNotebook);

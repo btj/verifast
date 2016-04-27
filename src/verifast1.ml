@@ -191,8 +191,9 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         
  let rec check_leaked_returned_value env leaked_h = 
     match env with
-        (s, t) :: [] -> if s = "result" then (check_result_value leaked_h (ctxt#pprint t)) else leaked_h  
-       |(s, t) :: x -> if s = "result" then (check_result_value leaked_h (ctxt#pprint t)) else (check_leaked_returned_value x leaked_h)
+        (*(s, t) :: [] -> if s = "result" then (check_result_value leaked_h (ctxt#pprint t)) else leaked_h  *)
+         [] -> leaked_h
+    |    (s, t) :: x -> if s = "result" then (check_result_value leaked_h (ctxt#pprint t)) else (check_leaked_returned_value x leaked_h)
    
 
    
@@ -232,7 +233,7 @@ let oc = open_out file in
     let rec modify i file_lines =     
         match file_lines with
            | [] -> close_out oc;
-           | line :: nextline -> printnow "%s %i %i %s \n" " i is " i line_no line;
+           | line :: nextline ->
                 if (i = line_no) then 
                     begin
                     output_string_file oc (new_post_cond line); 
@@ -2252,7 +2253,7 @@ let rec malloc_name leak predicatename= printnow "%s " predicatename;
         
 let check_leak_existance h env = return_leaked_heap h env
 
-let rec check_local_name name env =
+let rec check_local_name name env = (printnow "%s %s\n" "printing name" name); 
     match env with
         [] -> name
     |   (s, t) :: env -> 
@@ -2261,6 +2262,20 @@ let rec check_local_name name env =
             else begin
                check_local_name name env
             end
+
+let rec updateheap_withlocalname leaked_heap env =
+    match leaked_heap with
+        [] -> []
+    |   Leak_chunk(name, parameters) :: rest ->
+            let localparameters = 
+                let rec check_parameters parameters=
+                    match parameters with
+                        [] -> []
+                    |   parameter :: parametersrest -> 
+                            (check_local_name parameter env) :: (check_parameters parametersrest)
+                in check_parameters parameters
+            in
+            Leak_chunk(check_local_name name env, localparameters) :: (updateheap_withlocalname rest env)
 
 
 let rec check_local_name0 name cs row= 
@@ -2345,7 +2360,7 @@ let rec auto_close_stmt heap_leak l env=
             ((s, r, col), (s1, r1, col1)) ->
                 match (auto_close_predicate heap_leak (print_predicates)) with
                     "The leaked heap cann't be encapsulated into predicate" ->
-                         externalprint_post (lines_from_files s) s (filter_lheap (check_leaked_returned_value env heap_leak) (print_predicates))  (determine_no (search_context_stack_post !contextStack)) 
+                         externalprint_post (lines_from_files s) s (updateheap_withlocalname (filter_lheap (check_leaked_returned_value env heap_leak) (print_predicates)) env)  (determine_no (search_context_stack_post !contextStack)) 
                 |   predicatename -> 
                         (auto_close_stmt (((Leak_chunk(predicatename, ((check_local_name (malloc_name heap_leak predicatename) env) :: (check_other_predicate_parameters predicatename (print_predicates))))) :: remove_dummy_leaks(update_leak heap_leak predicatename (print_predicates)))) l env)
     
@@ -2538,25 +2553,26 @@ let print_missingheap_precondition predname targs parameters h env=
              Executing (h1, env1, loc1, msg1) ->
                 let l = loc1 and env = env1
                 in
-        let heap = create_partial_heap h env in             
-            match l with
-                ((s, r, col), (s1, r1, col1)) ->
-                    let predicatename = (String.sub predname 0 (try (String.index predname '_') with Not_found -> (String.length predname))) in
-                        let message = (search_heap predicatename heap r parameters) in
-                            if(message = "") then
-                               let message = Printf.sprintf "%s%s%s%s" (*(String.sub predname 0 (String.index predname '_'))*) predicatename "(" (String.concat "," (parameters_list0 parameters r)) ")" 
-                                in 
-                                    externalprint_pre (lines_from_files s) s message (print_line ((determine_no (search_context_stack_pre !contextStack))));   
-                            else
-                                externalprint_open_stmt (lines_from_files s) s message (r-1);
-                                if((try (Str.search_forward (Str.regexp "count[0-9]*") message 0) with Not_found -> -1) > -1) then
-                                    let message1 = Str.matched_string message in
-                                        if((try (Str.search_forward (Str.regexp "[-][0-9]+") message 0) with Not_found -> -1) > -1) then
-                                            let message2 = Printf.sprintf "%s %s %s" message1 ">" (String.sub (Str.matched_string message) 1 ((String.length (Str.matched_string message)) - 1)) in
-                                                externalprint_pre (lines_from_files s) s message2 (print_line ((determine_no (search_context_stack_pre !contextStack))))                          
-                                        else
-                                            let message2 = Printf.sprintf "%s %s" message1 "> 0" in
-                                                externalprint_pre (lines_from_files s) s message2 (print_line ((determine_no (search_context_stack_pre !contextStack)))) 
+                let heap = create_partial_heap h env in             
+                    match l with
+                        ((s, r, col), (s1, r1, col1)) ->
+                            let predicatename = (String.sub predname 0 (try (String.index predname '_') with Not_found -> (String.length predname))) 
+                            in
+                            let message = (search_heap predicatename heap r parameters) in
+                                if(message = "") then
+                                   let message = Printf.sprintf "%s%s%s%s" (*(String.sub predname 0 (String.index predname '_'))*) predicatename "(" (String.concat "," (parameters_list0 parameters r)) ")" 
+                                    in 
+                                        externalprint_pre (lines_from_files s) s message (print_line ((determine_no (search_context_stack_pre !contextStack))));   
+                                else
+                                    externalprint_open_stmt (lines_from_files s) s message (r-1);
+                                    if((try (Str.search_forward (Str.regexp "count[0-9]*") message 0) with Not_found -> -1) > -1) then
+                                        let message1 = Str.matched_string message in
+                                            if((try (Str.search_forward (Str.regexp "[-][0-9]+") message 0) with Not_found -> -1) > -1) then
+                                                let message2 = Printf.sprintf "%s %s %s" message1 ">" (String.sub (Str.matched_string message) 1 ((String.length (Str.matched_string message)) - 1)) in
+                                                    externalprint_pre (lines_from_files s) s message2 (print_line ((determine_no (search_context_stack_pre !contextStack))))                          
+                                            else
+                                                let message2 = Printf.sprintf "%s %s" message1 "> 0" in
+                                                    externalprint_pre (lines_from_files s) s message2 (print_line ((determine_no (search_context_stack_pre !contextStack)))) 
         
     end
         

@@ -22,7 +22,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   
 
   (*The following function is triggered when the user choose to generate predicate automatically*)
-  let generatePredicate = if(genPredicate) then ((printnow "%s \n" "Generating predicates"); (trial program_path)) else ((printnow "%s \n" "Not Generating predicates"))
+  let generatePredicate = if(genPredicate) then (trial program_path) else ()
 
   (* Region: verification of statements *)
 

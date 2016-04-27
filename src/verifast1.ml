@@ -1808,7 +1808,7 @@ let print_context_stack_test cs =
         match type_ with
             Bool -> "Bool"
           | Void -> "Void"
-          | IntType -> "Int"
+          | Int(s,i) -> "Int"
           | UShortType -> "UShort"
           | ShortType -> "Short"
           | UintPtrType -> "Other"  (* The uintptr_t type from the C99 standard. It's an integer type big enough to hold a pointer value. *)

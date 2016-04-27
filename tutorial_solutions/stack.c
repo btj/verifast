@@ -1,8 +1,9 @@
 #include "stdlib.h"
 
 
-//@ autogen stack = Many node
- 
+//@autogen stack = Many node
+
+
 
 //The following predicates are auto generated 
 /*@ 
@@ -12,21 +13,20 @@ stack->head |-> ?head &*& malloc_block_stack(stack) &*& node(head, count) &*& co
 
 predicate node (struct node *node; int count) = 
  node == 0 ? count == 0 : node->next |-> ?next &*& node->value |-> ?value &*& malloc_block_node(node)  &*& node(next, ?count1) &*& count == count1 + 1 &*& count > 0; 
-@*/ 
+@*/
 
-struct node {    struct node *next;	int value;
-};	
-
-struct stack 
-{    
-	struct node *head;
-	
+struct node {
+    struct node *next;
+    int value;
 };
 
+struct stack {
+    struct node *head;
+};
 
 struct stack *create_stack()
     //@ requires true;
-    //@ ensures true &*& stack(result,0);
+    //@ ensures true;
 {
     struct stack *stack = malloc(sizeof(struct stack));
     if (stack == 0) { abort(); }
@@ -35,24 +35,21 @@ struct stack *create_stack()
 }
 
 void stack_push(struct stack *stack, int value)
-    //@ requires true &*& stack(stack,?count0);
-    //@ ensures true &*& stack(stack,(count0 + 1));
+    //@ requires true;
+    //@ ensures true;
 {
     struct node *n = malloc(sizeof(struct node));
     if (n == 0) { abort(); }
     n->next = stack->head;
     n->value = value;
     stack->head = n;
-   
 }
 
 int stack_pop(struct stack *stack)
-    //@ requires true &*& stack(stack,?count0) &*& count0 > 0;
-    //@ ensures true &*& stack(stack,count0-1);
+    //@ requires true;
+    //@ ensures true;
 {
-
     struct node *head = stack->head;
-//@open node(head,count0); 
     int result = head->value;
     stack->head = head->next;
     free(head);
@@ -60,11 +57,9 @@ int stack_pop(struct stack *stack)
 }
 
 void stack_dispose(struct stack *stack)
-    //@ requires stack(stack,0);
+    //@ requires true;
     //@ ensures true;
 {
-	//@open stack(stack,0);
-	//@open node(_,_);
     free(stack);
 }
 

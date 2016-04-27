@@ -1,5 +1,6 @@
 [![Build Status](https://travis-ci.org/verifast/verifast.svg?branch=master)](https://travis-ci.org/verifast/verifast) [![Build status](https://ci.appveyor.com/api/projects/status/1w7vchky3k6erltw?svg=true)](https://ci.appveyor.com/project/verifast/verifast)
 
+ 
 VeriFast
 ========
 
@@ -12,6 +13,25 @@ VeriFast is a research prototype of a tool for modular formal verification of co
 The VeriFast source code and binaries are released under the [MIT license](LICENSE.md).
 
 For now, see [here](http://distrinet.cs.kuleuven.be/software/VeriFast/) for binary releases.
+
+
+Automated VeriFast
+========
+ 
+ By Mahmoud Mohsen\*, Bart Jacobs\*
+ 
+ \* iMinds-DistriNet research group, Department of Computer Science, KU Leuven - University of Leuven, Belgium
+ 
+ Automated VeriFast can be
+ considered as an extension to VeriFast where some functionalities have been added to automatically
+ generate predicates and infer function pre/post-conditions. In addition, it can automatically infer the
+ inline annotations, such as some of the open commands.
+ 
+ Automated VeriFast can be considered as an extension to VeriFast where some functionalities have been added to automatically generate predicates and infer function pre/post-conditions. In addition, it can automatically infer some of the inline annotations, such as some of the open commands. Automated VeriFast is an automation layer that exists on top of VeriFast. This automation layer doesn't not affect the verification process in any way, but on the other hand, it takes the output of the verification, in case of errors, and tries to infer some annotations that would solve this error. The interface of Automated VeriFast is the same as the normal VeriFast with two more buttons added. One button is for generating predicates and the other one for fixing the error. 
+ 
+ Automated VeriFast source code and binaries are released under the [MIT license](LICENSE.md).
+ 
+ For now, see [here](https://github.com/Mahmohsen/verifast/tree/Automated-Verifast) for source code and [here](https://github.com/Mahmohsen/verifast/tree/Automated-Verifast/Automated_Verifast_binary) for Windows binary releases.
 
 Documentation
 -------------

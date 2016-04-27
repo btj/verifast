@@ -16,7 +16,7 @@ For now, see [here](http://distrinet.cs.kuleuven.be/software/VeriFast/) for bina
 
 
 Automated VeriFast
-========
+==================
  
  By Mahmoud Mohsen\*, Bart Jacobs\*
  

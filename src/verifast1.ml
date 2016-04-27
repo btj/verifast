@@ -176,12 +176,16 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
  let rec print_leaked_heap (leaked_h : leaked_heap) oc =
     match leaked_h with 
         [] -> ()
-   |    Leak_chunk (name, arguments) :: x ->  (output_string_file oc (return_predicate_name (check_predicate name)));  (print_arg arguments oc true) (*I commented the following line because i want to print one postcondition per time, not the whole postcondition per once*) (*(print_leaked_heap x oc); flush oc *) 
+   |    Leak_chunk (name, arguments) :: x ->  (output_string_file oc (return_predicate_name (check_predicate name)));  (print_arg arguments oc true) 
 
  let rec check_result_value_arg arguments resultvalue = 
     match arguments with 
-        x :: [] -> if x = resultvalue then "result" :: [] else x :: [] 
-        |x :: y -> if x = resultvalue then "result" :: check_result_value_arg y resultvalue  else x :: check_result_value_arg y resultvalue
+        [] -> []
+    |   x :: y -> 
+            if x = resultvalue then 
+                "result" :: check_result_value_arg y resultvalue  
+            else 
+                x :: check_result_value_arg y resultvalue
        
 
  let rec check_result_value leaked_h resultvalue = 
@@ -191,7 +195,6 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         
  let rec check_leaked_returned_value env leaked_h = 
     match env with
-        (*(s, t) :: [] -> if s = "result" then (check_result_value leaked_h (ctxt#pprint t)) else leaked_h  *)
          [] -> leaked_h
     |    (s, t) :: x -> if s = "result" then (check_result_value leaked_h (ctxt#pprint t)) else (check_leaked_returned_value x leaked_h)
    

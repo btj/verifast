@@ -5,10 +5,10 @@ open Printf
 open Num (* rational numbers *)
 open Util
 open Stats
-open Ast
 open Lexer
 open Parser
 open Verifast0
+open Ast
 
 module type VERIFY_PROGRAM_ARGS = sig
   val emitter_callback: package list -> unit
@@ -571,11 +571,11 @@ let print_context_stack_test cs =
     | Double -> ProverInductive
     | LongDouble -> ProverInductive
     | UShortType -> ProverInt
-    | ShortType -> ProverInt
+    | Int (Signed, 2) -> ProverInt
     | UintPtrType -> ProverInt
     | RealType -> ProverReal
     | UChar -> ProverInt
-    | Char -> ProverInt
+    | Int (Signed, 1) -> ProverInt
     | InductiveType _ -> ProverInductive
     | StructType sn -> failwith "Using a struct as a value is not yet supported."
     | ObjType n -> ProverInt
@@ -670,9 +670,9 @@ let print_context_stack_test cs =
   
   let limits_of_type t =
     match t with
-    | Char -> (min_char_term, max_char_term)
+    | Int (Signed, 1) -> (min_char_term, max_char_term)
     | UChar -> (min_uchar_term, max_uchar_term)
-    | ShortType -> (min_short_term, max_short_term)
+    | Int (Signed, 2) -> (min_short_term, max_short_term)
     | UShortType -> (min_ushort_term, max_ushort_term)
     | Int (Signed, 4) -> (min_int_term, max_int_term)
     | UintPtrType | PtrType _ -> (int_zero_term, max_uint_term)
@@ -680,9 +680,9 @@ let print_context_stack_test cs =
   let get_unique_var_symb x t = 
     ctxt#mk_app (mk_symbol x [] (typenode_of_type t) Uninterp) []
   
-  let assume_bounds term tp = 
+  let assume_bounds term (tp: type_) = 
     match tp with
-      Char|UChar|ShortType|UShortType|Int (Signed, 4)|UintPtrType|PtrType _ ->
+      Int (Signed, 1)|UChar|Int (Signed, 2)|UShortType|Int (Signed, 4)|UintPtrType|PtrType _ ->
       let min, max = limits_of_type tp in
       ignore $. ctxt#assume (ctxt#mk_and (ctxt#mk_le min term) (ctxt#mk_le term max))
     | _ -> ()
@@ -2744,15 +2744,15 @@ let print_missingheap_precondition predname targs parameters h env=
     | (ArrayType (ObjType objtype), ArrayType (ObjType objtype0)) -> expect_type_core l msg None (ObjType objtype) (ObjType objtype0)
     | (StaticArrayType _, PtrType _) -> ()
     | (UChar, Int (Signed, 4)) -> ()
-    | (UChar, ShortType) -> ()
+    | (UChar, Int (Signed, 2)) -> ()
     | (UChar, UShortType) -> ()
     | (UChar, UintPtrType) -> ()
-    | (Char, Int (Signed, 4)) -> ()
-    | (Char, ShortType) -> ()
+    | (Int (Signed, 1), Int (Signed, 4)) -> ()
+    | (Int (Signed, 1), Int (Signed, 2)) -> ()
     | (UShortType, Int (Signed, 4)) -> ()
     | (UShortType, UintPtrType) -> ()
-    | (ShortType, Int (Signed, 4)) -> ()
-    | ((Char|UChar|ShortType|UShortType|Int (Signed, 4)|UintPtrType), (Char|UChar|ShortType|UShortType|Int (Signed, 4)|UintPtrType)) when inAnnotation = Some true -> ()
+    | (Int (Signed, 2), Int (Signed, 4)) -> ()
+    | ((Int (Signed, 1)|UChar|Int (Signed, 2)|UShortType|Int (Signed, 4)|UintPtrType), (Int (Signed, 1)|UChar|Int (Signed, 2)|UShortType|Int (Signed, 4)|UintPtrType)) when inAnnotation = Some true -> ()
     | (ObjType x, ObjType y) when is_subtype_of x y -> ()
     | (PredType ([], ts, inputParamCount, inductiveness), PredType ([], ts0, inputParamCount0, inductiveness0)) ->
       begin
@@ -2906,7 +2906,7 @@ let print_missingheap_precondition predname targs parameters h env=
         let rec check_ctor (ctorname, (_, (_, _, _, parameter_names_and_types, _))) =
           let rec check_type negative pt =
             match pt with
-            | Bool | Void | Int (Signed, 4) | UShortType | ShortType | UintPtrType | RealType | UChar | Char | PtrType _ | ObjType _ | ArrayType _ | BoxIdType | HandleIdType | AnyType -> ()
+            | Bool | Void | Int (Signed, 4) | UShortType | Int (Signed, 2) | UintPtrType | RealType | UChar | Int (Signed, 1) | PtrType _ | ObjType _ | ArrayType _ | BoxIdType | HandleIdType | AnyType -> ()
             | TypeParam _ -> if negative then static_error l "A type parameter may not appear in a negative position in an inductive datatype definition." None
             | InductiveType (i0, tps) ->
               List.iter (fun t -> check_type negative t) tps;
@@ -2969,7 +2969,7 @@ let print_missingheap_precondition predname targs parameters h env=
             let (_, pts) = List.split pts in
             let rec type_is_inhabited tp =
               match tp with
-                Bool | Int (Signed, 4) | ShortType | UintPtrType | RealType | Char | PtrType _ | ObjType _ | ArrayType _ | BoxIdType | HandleIdType | AnyType -> true
+                Bool | Int (Signed, 4) | Int (Signed, 2) | UintPtrType | RealType | Int (Signed, 1) | PtrType _ | ObjType _ | ArrayType _ | BoxIdType | HandleIdType | AnyType -> true
               | TypeParam _ -> true  (* Should be checked at instantiation site. *)
               | PredType (tps, pts, _, _) -> true
               | PureFuncType (t1, t2) -> type_is_inhabited t2
@@ -3012,7 +3012,7 @@ let print_missingheap_precondition predname targs parameters h env=
             match tp with
               Bool -> Some []
             | TypeParam x -> Some [x]
-            | Int (Signed, 4) | ShortType | UintPtrType | RealType | Char | PtrType _ | PredType (_, _, _, _) | ObjType _ | ArrayType _ | BoxIdType | HandleIdType | AnyType -> None
+            | Int (Signed, 4) | Int (Signed, 2) | UintPtrType | RealType | Int (Signed, 1) | PtrType _ | PredType (_, _, _, _) | ObjType _ | ArrayType _ | BoxIdType | HandleIdType | AnyType -> None
             | PureFuncType (_, _) -> None (* CAVEAT: This assumes we do *not* have extensionality *)
             | InductiveType (i0, targs) ->
               begin match try_assoc i0 infinite_map with
@@ -3061,7 +3061,7 @@ let print_missingheap_precondition predname targs parameters h env=
     match tp with
       Bool -> false
     | TypeParam x -> true
-    | Int (Signed, 4) | ShortType | UintPtrType | RealType | Char | PtrType _ | PredType (_, _, _, _) | ObjType _ | ArrayType _ | BoxIdType | HandleIdType | AnyType -> true
+    | Int (Signed, 4) | Int (Signed, 2) | UintPtrType | RealType | Int (Signed, 1) | PtrType _ | PredType (_, _, _, _) | ObjType _ | ArrayType _ | BoxIdType | HandleIdType | AnyType -> true
     | PureFuncType (t1, t2) -> is_universal_type t1 && is_universal_type t2
     | InductiveType (i0, targs) ->
       let (_, _, _, cond) = List.assoc i0 inductivemap in
@@ -3713,7 +3713,7 @@ let print_missingheap_precondition predname targs parameters h env=
         (w1, w2, RealType)
       | ((UChar | UShortType | UintPtrType), (UChar | UShortType | UintPtrType)) ->
         (w1, w2, UintPtrType)
-      | ((Char|ShortType|Int (Signed, 4)|UChar|UShortType), (Char|ShortType|Int (Signed, 4)|UChar|UShortType)) ->
+      | ((Int (Signed, 1)|Int (Signed, 2)|Int (Signed, 4)|UChar|UShortType), (Int (Signed, 1)|Int (Signed, 2)|Int (Signed, 4)|UChar|UShortType)) ->
         (w1, w2, Int (Signed, 4))
       | ((LongDouble, _)|(_, LongDouble)) ->
         let w1 = if t1 = LongDouble then w1 else checkt e1 LongDouble in
@@ -3743,7 +3743,7 @@ let print_missingheap_precondition predname targs parameters h env=
      *)
     let promote_checkdone l e1 e2 check_e1 check_e2 =
       match promote_numeric_checkdone e1 e2 check_e1 check_e2 with
-        (w1, w2, (Char | ShortType | Int (Signed, 4) | RealType | UintPtrType | PtrType _ | UShortType | UChar | Float | Double | LongDouble)) as result -> result
+        (w1, w2, (Int (Signed, 1) | Int (Signed, 2) | Int (Signed, 4) | RealType | UintPtrType | PtrType _ | UShortType | UChar | Float | Double | LongDouble)) as result -> result
       | _ -> static_error l "Expression of arithmetic or pointer type expected." None
     in
     let promote_numeric e1 e2 =
@@ -3911,7 +3911,7 @@ let print_missingheap_precondition predname targs parameters h env=
       let (w1, t1, _) = check e1 in
       let (w2, t2, _) = check e2 in
       begin match (t1, t2) with
-        ((Char|UChar|ShortType|UShortType|Int (Signed, 4)|UintPtrType), (Char|UChar|ShortType|UShortType|Int (Signed, 4)|UintPtrType)) ->
+        ((Int (Signed, 1)|UChar|Int (Signed, 2)|UShortType|Int (Signed, 4)|UintPtrType), (Int (Signed, 1)|UChar|Int (Signed, 2)|UShortType|Int (Signed, 4)|UintPtrType)) ->
         let t = match (t1, t2) with (UintPtrType, _) | (_, UintPtrType) -> UintPtrType | _ -> Int (Signed, 4) in
         (WOperation (l, BitAnd, [w1; w2], [t1; t2]), t, None)
       | _ -> static_error l "Arguments to bitwise operators must be integral types." None
@@ -3921,7 +3921,7 @@ let print_missingheap_precondition predname targs parameters h env=
       let (_, t2, _) = check e2 in
       begin
       match t1 with
-        (Char|UChar|ShortType|UShortType|Int (Signed, 4)) -> let w2 = checkt e2 intType in (WOperation (l, operator, [w1; w2], [t1; t2]), intType, None)
+        (Int (Signed, 1)|UChar|Int (Signed, 2)|UShortType|Int (Signed, 4)) -> let w2 = checkt e2 intType in (WOperation (l, operator, [w1; w2], [t1; t2]), intType, None)
       | UintPtrType -> let w2 = checkt e2 UintPtrType in (WOperation (l, operator, [w1; w2], [UintPtrType; UintPtrType]), UintPtrType, None)
       | _ -> static_error l "Arguments to bitwise operators must be integral types." None
       end
@@ -3930,7 +3930,7 @@ let print_missingheap_precondition predname targs parameters h env=
       let (_, t2, _) = check e2 in
       begin
       match t1 with
-        (Char | ShortType | Int (Signed, 4)) -> let w2 = checkt e2 intType in (WOperation (l, Mod, [w1; w2], [t1; t2]), intType, None)
+        (Int (Signed, 1) | Int (Signed, 2) | Int (Signed, 4)) -> let w2 = checkt e2 intType in (WOperation (l, Mod, [w1; w2], [t1; t2]), intType, None)
       | (UChar | UShortType | UintPtrType) -> let w2 = checkt e2 UintPtrType in (WOperation (l, Mod, [w1; w2], [UintPtrType; UintPtrType]), UintPtrType, None)
       | _ -> static_error l "Arguments to modulus operator must be integral types." None
       end
@@ -3938,7 +3938,7 @@ let print_missingheap_precondition predname targs parameters h env=
       let (w, t, _) = check e in
       begin
       match t with
-        Char | ShortType | Int (Signed, 4) -> (WOperation (l, BitNot, [w], [Int (Signed, 4)]), Int (Signed, 4), None)
+        Int (Signed, 1) | Int (Signed, 2) | Int (Signed, 4) -> (WOperation (l, BitNot, [w], [Int (Signed, 4)]), Int (Signed, 4), None)
       | UintPtrType -> (WOperation (l, BitNot, [w], [UintPtrType]), UintPtrType, None)
       | _ -> static_error l "argument to ~ must be char, short, int or uintptr" None
       end
@@ -3954,7 +3954,7 @@ let print_missingheap_precondition predname targs parameters h env=
         match t1, t2 with
           PtrType pt1, PtrType pt2 when operator = Sub ->
             if pt1 <> pt2 then static_error l "Pointers must be of same type" None;
-            if pt1 <> Char && pt1 <> Void then static_error l "Subtracting non-char pointers is not yet supported" None;
+            if pt1 <> Int (Signed, 1) && pt1 <> Void then static_error l "Subtracting non-char pointers is not yet supported" None;
             (WOperation (l, operator, [w1; w2], [t1; t2]), Int (Signed, 4), None)
         | PtrType pt1, _ ->
             let w2 = checkt e2 intt in
@@ -3995,7 +3995,7 @@ let print_missingheap_precondition predname targs parameters h env=
       (ClassLit (l, s), ObjType "java.lang.Class", None)
     | StringLit (l, s) -> (match file_type path with
         Java-> (e, ObjType "java.lang.String", None)
-      | _ -> (e, (PtrType Char), None))
+      | _ -> (e, (PtrType (Int (Signed, 1))), None))
     | CastExpr (l, truncating, te, e) ->
       let t = check_pure_type (pn,ilist) tparams te in
       let w = checkt_cast e t in
@@ -4292,7 +4292,7 @@ let print_missingheap_precondition predname targs parameters h env=
           begin match t2 with
             PtrType pt2 when operator = Sub ->
             if pt1 <> pt2 then static_error l "Pointers must be of same type" None;
-            if pt1 <> Char && pt1 <> Void then static_error l "Subtracting non-char pointers is not yet supported" None;
+            if pt1 <> Int (Signed, 1) && pt1 <> Void then static_error l "Subtracting non-char pointers is not yet supported" None;
             ts:=Some [t1; t2];
             (AssignOpExpr(l, w1, operator, w2, postOp, ts, lhs_type), intType, None)
           | _ ->
@@ -4300,7 +4300,7 @@ let print_missingheap_precondition predname targs parameters h env=
             ts:=Some [t1; intType];
             (AssignOpExpr(l, w1, operator, w2, postOp, ts, lhs_type), t1, None)
           end
-        | Int (Signed, 4) | RealType | ShortType | Char ->
+        | Int (Signed, 4) | RealType | Int (Signed, 2) | Int (Signed, 1) ->
           let (w1, w2, t) = promote_checkdone l e1 e2 (w1, t1, value1) (w2, t2, value2) in
           ts := Some [t; t];
           (AssignOpExpr(l, w1, operator, w2, postOp, ts, lhs_type), t1, None)
@@ -4317,7 +4317,7 @@ let print_missingheap_precondition predname targs parameters h env=
       ts := Some [t1; t2];
       begin match (t1, t2) with
         ((Bool, Bool)) -> (AssignOpExpr(l, w1, operator, w2, postOp, ts, lhs_type), t1, None)
-      | ((Char|ShortType|Int (Signed, 4)), (Char|ShortType|Int (Signed, 4))) ->
+      | ((Int (Signed, 1)|Int (Signed, 2)|Int (Signed, 4)), (Int (Signed, 1)|Int (Signed, 2)|Int (Signed, 4))) ->
         (AssignOpExpr(l, w1, (match operator with And -> BitAnd | Or -> BitOr | Xor -> BitXor), w2, postOp, ts, lhs_type), Int (Signed, 4), None)
        | _ -> static_error l "Arguments to |=, &= and ^= must be boolean or integral types." None
       end
@@ -4353,8 +4353,8 @@ let print_missingheap_precondition predname targs parameters h env=
           static_error l "Integer literal used as uchar must be between 0 and 255." None
       else
         e
-    | (IntLit (l, n, t), Char) ->
-      t:=Some Char;
+    | (IntLit (l, n, t), Int (Signed, 1)) ->
+      t:=Some (Int (Signed, 1));
       if not (le_big_int min_char_big_int n && le_big_int n max_char_big_int) then
         if isCast then
           let n = int_of_big_int (mod_big_int n (big_int_of_int 256)) in
@@ -4374,8 +4374,8 @@ let print_missingheap_precondition predname targs parameters h env=
           static_error l "Integer literal used as ushort must be between 0 and 65535." None
       else
         e
-    | (IntLit (l, n, t), ShortType) ->
-      t:=Some ShortType;
+    | (IntLit (l, n, t), Int (Signed, 2)) ->
+      t:=Some (Int (Signed, 2));
       if not (le_big_int min_short_big_int n && le_big_int n max_short_big_int) then
         if isCast then
           let n = int_of_big_int (mod_big_int n (big_int_of_int 65536)) in
@@ -4408,7 +4408,7 @@ let print_missingheap_precondition predname targs parameters h env=
         | (ObjType _, ObjType _) when isCast -> w
         | (PtrType _, UintPtrType) when isCast -> w
         | (UintPtrType, PtrType _) when isCast -> w
-        | ((Int (Signed, 4)|UintPtrType|ShortType|UShortType|Char|UChar), (Int (Signed, 4)|UintPtrType|ShortType|UShortType|Char|UChar)) when isCast -> w
+        | ((Int (Signed, 4)|UintPtrType|Int (Signed, 2)|UShortType|Int (Signed, 1)|UChar), (Int (Signed, 4)|UintPtrType|Int (Signed, 2)|UShortType|Int (Signed, 1)|UChar)) when isCast -> w
         | ((Int (Signed, 4)|UintPtrType|Float|Double|LongDouble), (Float|Double|LongDouble)) -> floating_point_fun_call_expr funcmap (expr_loc w) t0 ("of_" ^ identifier_string_of_type t) [TypedExpr (w, t)]
         | ((Float|Double|LongDouble), (Int (Signed, 4)|UintPtrType)) -> floating_point_fun_call_expr funcmap (expr_loc w) t0 ("of_" ^ identifier_string_of_type t) [TypedExpr (w, t)]
         | (ObjType ("java.lang.Object"), ArrayType _) when isCast -> w
@@ -4421,14 +4421,14 @@ let print_missingheap_precondition predname targs parameters h env=
         end
       in
       match (value, t, t0) with
-        (Some(value), Int (Signed, 4), Char) when le_big_int min_char_big_int value && le_big_int value max_char_big_int -> w 
-      | (Some(value), Int (Signed, 4), ShortType) when le_big_int min_short_big_int value && le_big_int value max_short_big_int -> w
+        (Some(value), Int (Signed, 4), Int (Signed, 1)) when le_big_int min_char_big_int value && le_big_int value max_char_big_int -> w 
+      | (Some(value), Int (Signed, 4), Int (Signed, 2)) when le_big_int min_short_big_int value && le_big_int value max_short_big_int -> w
       | _ -> check ()
   and check_condition_core functypemap funcmap classmap interfmap (pn,ilist) tparams tenv (inAnnotation: bool option) e =
     let (w, t, _) = check_expr_core functypemap funcmap classmap interfmap (pn,ilist) tparams tenv inAnnotation e in
     match t with
       Bool -> w
-    | Char | UChar | ShortType | UShortType | Int (Signed, 4) | UintPtrType | PtrType _ when language = CLang ->
+    | Int (Signed, 1) | UChar | Int (Signed, 2) | UShortType | Int (Signed, 4) | UintPtrType | PtrType _ when language = CLang ->
       WOperation (expr_loc e, Neq, [w; IntLit(expr_loc e, big_int_of_int 0, ref (Some t))], [t; t])
     | _ -> expect_type (expr_loc e) inAnnotation t Bool; w
   and check_deref_core functypemap funcmap classmap interfmap (pn,ilist) l tparams tenv e f =
@@ -4689,7 +4689,7 @@ let print_missingheap_precondition predname targs parameters h env=
   
   let rec check_c_initializer e tp =
     match tp, e with
-    | StaticArrayType (Char, n), StringLit (ls, s) ->
+    | StaticArrayType (Int (Signed, 1), n), StringLit (ls, s) ->
       if String.length s + 1 > n then static_error ls "String literal does not fit inside character array." None;
       e
     | StaticArrayType (elemTp, elemCount), InitializerList (ll, es) ->
@@ -4767,7 +4767,7 @@ let print_missingheap_precondition predname targs parameters h env=
       | CastExpr (l, truncating, ManifestTypeExpr (_, t), e) ->
         let v = ev e in
         begin match (t, v) with
-          (Char, IntConst n) ->
+          (Int (Signed, 1), IntConst n) ->
           let n =
             if not (le_big_int (big_int_of_int (-128)) n && le_big_int n (big_int_of_int 127)) then
               let n = int_of_big_int (mod_big_int n (big_int_of_int 256)) in
@@ -4777,7 +4777,7 @@ let print_missingheap_precondition predname targs parameters h env=
               n
           in
           IntConst n
-        | (ShortType, IntConst n) ->
+        | (Int (Signed, 2), IntConst n) ->
           let n =
             if not (le_big_int (big_int_of_int (-32768)) n && le_big_int n (big_int_of_int 32767)) then
               let n = int_of_big_int (mod_big_int n (big_int_of_int 65536)) in
@@ -4988,7 +4988,7 @@ let print_missingheap_precondition predname targs parameters h env=
       PtrType _ -> Some pointer_pointee_tuple
     | Int (Signed, 4) -> Some int_pointee_tuple
     | UintPtrType -> Some uint_pointee_tuple
-    | Char -> Some char_pointee_tuple
+    | Int (Signed, 1) -> Some char_pointee_tuple
     | UChar -> Some uchar_pointee_tuple
     | _ -> None
     end
@@ -5463,9 +5463,9 @@ let print_missingheap_precondition predname targs parameters h env=
                   let pref = new predref "u_integer" in
                   pref#set_domain [PtrType UintPtrType; UintPtrType];
                   [predinst pref]
-                | Char ->
+                | Int (Signed, 1) ->
                   let pref = new predref "character" in
-                  pref#set_domain [PtrType Char; Char];
+                  pref#set_domain [PtrType (Int (Signed, 1)); Int (Signed, 1)];
                   [predinst pref]
                 | UChar ->
                   let pref = new predref "u_character" in
@@ -5625,8 +5625,8 @@ let print_missingheap_precondition predname targs parameters h env=
   
   let rec sizeof l t =
     match t with
-      Void | Char | UChar -> ctxt#mk_intlit 1
-    | ShortType | UShortType -> ctxt#mk_intlit 2
+      Void | Int (Signed, 1) | UChar -> ctxt#mk_intlit 1
+    | Int (Signed, 2) | UShortType -> ctxt#mk_intlit 2
     | Int (Signed, 4) | UintPtrType -> ctxt#mk_intlit 4
     | PtrType _ -> ctxt#mk_intlit 4
     | StructType sn -> List.assoc sn struct_sizes
@@ -5721,7 +5721,7 @@ let print_missingheap_precondition predname targs parameters h env=
     if n = 0 then
       mk_nil ()
     else
-      mk_cons Char (ctxt#mk_intlit 0) (mk_zero_list (n - 1))
+      mk_cons (Int (Signed, 1)) (ctxt#mk_intlit 0) (mk_zero_list (n - 1))
   
   let mk_char_list_of_c_string size s =
     let n = String.length s in
@@ -5730,7 +5730,7 @@ let print_missingheap_precondition predname targs parameters h env=
       if k = n then
         mk_zero_list (size - n)
       else
-        mk_cons Char (ctxt#mk_intlit (as_signed_char (Char.code s.[k]))) (iter (k + 1))
+        mk_cons (Int (Signed, 1)) (ctxt#mk_intlit (as_signed_char (Char.code s.[k]))) (iter (k + 1))
     in
     iter 0
   
@@ -6123,8 +6123,8 @@ let check_if_list_is_defined () =
     match ts with
       Some ([UintPtrType; _] | [_; UintPtrType]) -> Some (int_zero_term, max_ptr_term)
     | Some ([Int (Signed, 4); _] | [_; Int (Signed, 4)]) -> Some (min_int_term, max_int_term)
-    | Some ([ShortType; _] | [_; ShortType]) -> Some (min_short_term, max_short_term)
-    | Some ([Char; _] | [_; Char]) -> Some (min_char_term, max_char_term)
+    | Some ([Int (Signed, 2); _] | [_; Int (Signed, 2)]) -> Some (min_short_term, max_short_term)
+    | Some ([Int (Signed, 1); _] | [_; Int (Signed, 1)]) -> Some (min_char_term, max_char_term)
     | _ -> None
     in
     begin match op with
@@ -6147,9 +6147,9 @@ let check_if_list_is_defined () =
         check_overflow l (ctxt#mk_intlit 0) (ctxt#mk_add v1 (ctxt#mk_mul n v2)) max_ptr_term
       | (RealType, RealType) ->
         ctxt#mk_real_add v1 v2
-      | (ShortType, ShortType) ->
+      | (Int (Signed, 2), Int (Signed, 2)) ->
         check_overflow l min_short_term (ctxt#mk_add v1 v2) max_short_term
-      | (Char, Char) ->
+      | (Int (Signed, 1), Int (Signed, 1)) ->
         check_overflow l min_char_term (ctxt#mk_add v1 v2) max_char_term
       | (UintPtrType, UintPtrType) ->
         check_overflow l min_uint_term (ctxt#mk_add v1 v2) max_uint_term
@@ -6165,11 +6165,11 @@ let check_if_list_is_defined () =
         check_overflow l (ctxt#mk_intlit 0) (ctxt#mk_sub v1 (ctxt#mk_mul n v2)) max_ptr_term
       | (RealType, RealType) ->
         ctxt#mk_real_sub v1 v2
-      | (ShortType, ShortType) ->
+      | (Int (Signed, 2), Int (Signed, 2)) ->
         check_overflow l min_short_term (ctxt#mk_sub v1 v2) max_short_term
-      | (Char, Char) ->
+      | (Int (Signed, 1), Int (Signed, 1)) ->
         check_overflow l min_char_term (ctxt#mk_sub v1 v2) max_char_term
-      | (PtrType (Char | Void), PtrType (Char | Void)) ->
+      | (PtrType (Int (Signed, 1) | Void), PtrType (Int (Signed, 1) | Void)) ->
         check_overflow l min_int_term (ctxt#mk_sub v1 v2) max_int_term
       | (UintPtrType, UintPtrType) ->
         check_overflow l min_uint_term (ctxt#mk_sub v1 v2) max_uint_term
@@ -6297,17 +6297,17 @@ let check_if_list_is_defined () =
           if ass_term <> None && not (le_big_int zero_big_int n &&
 le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out of range." None;
           cont state (ctxt#mk_intlit_of_string (string_of_big_int n))
-        | (e, (Char|UChar|ShortType|UShortType|Int (Signed, 4)|UintPtrType as tp), false) ->
+        | (e, (Int (Signed, 1)|UChar|Int (Signed, 2)|UShortType|Int (Signed, 4)|UintPtrType as tp), false) ->
           ev state e $. fun state t ->
           let min, max = limits_of_type tp in
           cont state (check_overflow l min t max)
-        | (e, Char, true) ->
+        | (e, Int (Signed, 1), true) ->
           ev state e $. fun state t ->
           cont state (ctxt#mk_app truncate_int8_symbol [t])
         | (e, UChar, true) ->
           ev state e $. fun state t ->
           cont state (ctxt#mk_app truncate_uint8_symbol [t])
-        | (e, ShortType, true) ->
+        | (e, Int (Signed, 2), true) ->
           ev state e $. fun state t ->
           cont state (ctxt#mk_app truncate_int16_symbol [t])
         | (e, UShortType, true) ->
@@ -6351,9 +6351,9 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
             match t with 
               Int (Signed, 4) -> (min_int_big_int, max_int_big_int)
             | UChar -> (min_uchar_big_int, max_uchar_big_int)
-            | Char -> (min_char_big_int, max_char_big_int)
+            | Int (Signed, 1) -> (min_char_big_int, max_char_big_int)
             | UShortType -> (min_ushort_big_int, max_ushort_big_int)
-            | ShortType -> (min_short_big_int, max_short_big_int)
+            | Int (Signed, 2) -> (min_short_big_int, max_short_big_int)
             | UintPtrType -> (zero_big_int, max_ptr_big_int)
             | PtrType _ -> (zero_big_int, max_ptr_big_int)
           in
@@ -6372,7 +6372,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
       cont state
         begin match file_type path with
           Java -> get_unique_var_symb "stringLiteral" (ObjType "java.lang.String")
-        | _ -> get_unique_var_symb "stringLiteral" (PtrType Char)
+        | _ -> get_unique_var_symb "stringLiteral" (PtrType (Int (Signed, 1)))
         end
     | WMethodCall (l, "java.lang.Object", "getClass", [], [target], Instance) ->
       ev state target $. fun state t ->

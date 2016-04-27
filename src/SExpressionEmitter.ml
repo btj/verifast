@@ -64,10 +64,10 @@ let rec sexpr_of_type_ (t : type_) : sexpression =
     | Bool                    -> aux2 "type-bool"
     | Void                    -> aux2 "type-void"
     | Int (Signed, 4)         -> aux2 "type-int"
-    | ShortType               -> aux2 "type-short"
+    | Int (Signed, 2)         -> aux2 "type-short"
     | UintPtrType             -> aux2 "type-uint-ptr"
     | RealType                -> aux2 "type-real"
-    | Char                    -> aux2 "type-char"
+    | Int (Signed, 1)         -> aux2 "type-char"
     | StructType s            -> List [ Symbol "type-struct"; Symbol s ]
     | PtrType t               -> List [ Symbol "type-pointer-to"; sexpr_of_type_ t ]
     | FuncType s              -> List [ Symbol "type-function"; Symbol s ]

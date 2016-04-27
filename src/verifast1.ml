@@ -214,7 +214,7 @@ let print_missing_heap msg oc=
 
 let new_post_cond line =String.sub line 0 (try (String.index line ';') with Not_found -> String.length line) 
 
-let new_pre_cond line = String.sub line 0 (String.index line ';')
+let new_pre_cond line = String.sub line 0 (try (String.index line ';') with Not_found -> String.length line)
 
 let add_new_post leaked_h oc = 
     output_string_file oc " &*& "; 
@@ -227,15 +227,25 @@ open Printf
 
 (*Any function starts with externalprint means that it modifies the .c file that is being verified*)
 
-let externalprint_post file_lines file leaked_h line_no= printnow "%i \n" line_no;
+let externalprint_post file_lines file leaked_h line_no=
 let oc = open_out file in
     let rec modify i file_lines =     
         match file_lines with
            | [] -> close_out oc;
            | line :: nextline -> printnow "%s %i %i %s \n" " i is " i line_no line;
                 if (i = line_no) then 
-                    (output_string_file oc (new_post_cond line); add_new_post leaked_h oc; output_string_file oc "\n"; modify (succ i) nextline) 
-                else (output_string_file oc line; output_string_file oc "\n"; modify (succ i) nextline)        
+                    begin
+                    output_string_file oc (new_post_cond line); 
+                    add_new_post leaked_h oc; 
+                    output_string_file oc "\n"; 
+                    modify (succ i) nextline
+                    end 
+                else 
+                    begin
+                    output_string_file oc line; 
+                    output_string_file oc "\n"; 
+                    modify (succ i) nextline
+                    end        
    in modify 1 file_lines
            
            
@@ -1772,25 +1782,8 @@ let print_context_stack_test cs =
     end
     else
      []
-  
-  let print_predicate_param fields =
-    match fields with 
-        None -> ()
-    |   Some v -> (kfprintf (fun _ -> flush stdout) stdout "3333: %s4444, " v)
-  
-  
-  let check_fields fds_opt =
-    match fds_opt with
-       Some (Field(a1,a2,a3,a4,a5,a6,a7,a8) :: a9) -> ()(* kfprintf (fun _ -> flush stdout) stdout "%s" s *)
-   |   _ -> ()
-  
-  let print_Struct =
-    let rec iter ds =
-        match ds with
-            [] ->  ()(*kfprintf (fun _ -> flush stdout) stdout "String: %s" "No more structs. \n"*)
-        |   (sn, (((s,l,l1),(s1,l2,l3)), fds_opt))::dss -> (*kfprintf (fun _ -> flush stdout) stdout "String struct: %s %s %i %s" sn " : " l "\n";*) (check_fields fds_opt); (iter dss)
-    in iter structdeclmap
-    
+
+(*The following functin return the line no. of first struct in the code where predicates would be written above*)
     let loc_of_firststruct =
         let rec iter ds line_no =
             match ds with
@@ -2153,17 +2146,20 @@ let print_context_stack_test cs =
    let oc = open_out file in
       let rec modify i file_lines =
           match file_lines with
-                [] -> close_out oc;            
+                [] -> 
+                    close_out oc            
               | line :: nextline -> 
                   if (i = line_no) then begin
                       begin generate_predicate (autgendeclmap) oc (check_struct_structure (create_new_struct_map [])) end; 
-                      output_string_file oc "\n"; 
+                      output_string_file oc "\n\n";
                       output_string_file oc line; 
-                      modify (succ i) nextline end 
+                      modify (succ i) nextline 
+                      end 
                   else begin
                       output_string_file oc line; 
                       output_string_file oc "\n"; 
-                      modify (succ i) nextline end
+                      modify (succ i) nextline 
+                      end
              in modify 1 file_lines
   
   let rec check_existance_heap predicate_body l_heap = 
@@ -2265,8 +2261,6 @@ let rec check_local_name name env =
             else begin
                check_local_name name env
             end
-
-
 
 
 let rec check_local_name0 name cs row= 
@@ -2505,15 +2499,15 @@ let rec search_heap predname heap r parameters0 =
     |   Leak_chunk(predicatename, parameters) :: heap -> printnow "%s %s \n" predname predicatename;
             if(predname = predicatename) then
                 match parameters with
-                        [] -> search_heap predname heap r parameters0
-                |       par1 :: restparameters -> 
-                                match parameters0 with
-                                        [] -> search_heap predname heap r parameters0
-                                |       par2 :: restparameters0 ->
-                                                if(par1 = par2) then
-                                                        Printf.sprintf "\n//@open %s%s%s%s%s \n" predname "(" (String.concat "," (parameters_list0 parameters r)) ")" ";"
-                                                else
-                                                        search_heap predname heap r parameters0
+                    [] -> search_heap predname heap r parameters0
+                |   par1 :: restparameters -> 
+                        match parameters0 with
+                            [] -> search_heap predname heap r parameters0
+                        |   par2 :: restparameters0 ->
+                                if(par1 = par2) then
+                                    Printf.sprintf "\n//@open %s%s%s%s%s \n" predname "(" (String.concat "," (parameters_list0 parameters r)) ")" ";"
+                                else
+                                    search_heap predname heap r parameters0
             else 
                 search_heap predname heap r parameters0
                 

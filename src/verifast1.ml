@@ -148,7 +148,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
  let rec create_partial_heap h env= 
        match h with
         [] -> []
-    |   (Chunk ((g, literal), targs, coef, ts, size)) :: y ->  printnow "%s %s \n" "heeap "(ctxt#pprint g);
+    |   (Chunk ((g, literal), targs, coef, ts, size)) :: y -> 
             Leak_chunk ((ctxt#pprint g), (return_leaked_chunk_arguments ts)) :: (create_partial_heap y env)
               
     
@@ -367,7 +367,7 @@ let line_no l =
 (*By Mahmoud: this is really a bad idea, but I don't have any clue now, so I will improve it later*)
 let rec determine_no list_of_nos = 
     match list_of_nos with
-        x :: [] -> printnow "%s %i \n" "Inside determine_no" x; if (x > 0) then x else 0
+        x :: [] -> if (x > 0) then x else 0
        |x :: y :: z  -> if (x > y) then (determine_no (x :: z)) else (determine_no (y :: z)) 
 
 
@@ -1970,12 +1970,6 @@ let print_context_stack_test cs =
     else
     []
 
-  let rec print_predicates_test print_predicates =
-    match print_predicates with
-        [] -> ()
-    |   (name, parameters, body) :: next ->  kfprintf (fun _ -> flush stdout) stdout "Field name: %s %s" name "\n"; print_predicates_test next
-  
-  
   let create_new_struct_map newstructmap =
     let rec iter ds = 
         match ds with
@@ -2075,8 +2069,7 @@ let print_context_stack_test cs =
                output_string_file oc ";) = \n"
             else
                output_string_file oc "; \n"
-    |   Autogen(x, y) :: autogenmap -> 
-            printnow "%s \n" x; 
+    |   Autogen(x, y) :: autogenmap ->  
                 if(x = structname) then 
                     begin
                     if (flag = 0) then 
@@ -2198,7 +2191,7 @@ let remove_encapsulated_chunk predbody l_chunk chunkname =
                 if(chunkname = (String.concat  "_" (structname :: fieldname :: []) )) 
                     then Leak_chunk("",("" :: [])) (*Adding dummy leaks*)
                     else iter predicatebody
-        |   Inner_pred (innerpredicatename, paramters) :: predicatebody -> printnow "%s %s %s \n" "Cheeeck" chunkname innerpredicatename;
+        |   Inner_pred (innerpredicatename, paramters) :: predicatebody ->
                 if(chunkname = innerpredicatename) 
                     then Leak_chunk("",("" :: [])) (*Adding dummy leaks*)
                     else iter predicatebody
@@ -2236,17 +2229,21 @@ let rec auto_close_predicate (l_heap: leaked_heap) (predmap: predicate_map) =
             else auto_close_predicate l_heap predmap
                         
 
-let rec malloc_name leak predicatename= printnow "%s " predicatename;
+(*The followoing function just take the predicate name and look at the heap to exact the struct name that is represented by this predicate name. It does that by checking the malloc_block struct heap chunk*)
+
+let rec malloc_name leak predicatename=
     match leak with
         [] -> ""
-    |   Leak_chunk(name, parameters) :: rest_heap ->  printnow "%s \n" name;
+    |   Leak_chunk(name, parameters) :: rest_heap ->
             if((String.length name) > 12) then
                 if((String.sub name 0 12) = "malloc_block") then
+                    begin                    
                     if((String.sub name 13 ((String.length name) - 13)) = predicatename) then
                         match parameters with
-                            structname :: [] -> structname
+                            structname :: [] -> structname                    
                     else
                         malloc_name rest_heap predicatename
+                    end
                 else
                     malloc_name rest_heap predicatename
             else
@@ -2254,7 +2251,7 @@ let rec malloc_name leak predicatename= printnow "%s " predicatename;
         
 let check_leak_existance h env = return_leaked_heap h env
 
-let rec check_local_name name env = (printnow "%s %s\n" "printing name" name); 
+let rec check_local_name name env =
     match env with
         [] -> name
     |   (s, t) :: env -> 
@@ -2267,7 +2264,7 @@ let rec check_local_name name env = (printnow "%s %s\n" "printing name" name);
 let rec updateheap_withlocalname leaked_heap env =
     match leaked_heap with
         [] -> []
-    |   Leak_chunk(name, parameters) :: rest ->
+    |   Leak_chunk(name, parameters) :: rest -> 
             let localparameters = 
                 let rec check_parameters parameters=
                     match parameters with
@@ -2279,7 +2276,7 @@ let rec updateheap_withlocalname leaked_heap env =
             Leak_chunk(check_local_name name env, localparameters) :: (updateheap_withlocalname rest env)
 
 
-let rec check_local_name0 name cs row= 
+let rec check_local_name0 name cs row=
     match cs with
         [] -> ""
     |   Executing (h, env, l, msg) :: cs ->
@@ -2351,9 +2348,7 @@ let rec check_other_predicate_parameters predicatename predicatemap =
                                     iter0 body
                         in iter0 body
             in iter predmap
-                                    
-                    
-    
+                                                            
         
 let rec auto_close_stmt heap_leak l env= 
     if(autofix) then
@@ -2361,10 +2356,9 @@ let rec auto_close_stmt heap_leak l env=
             ((s, r, col), (s1, r1, col1)) ->
                 match (auto_close_predicate heap_leak (print_predicates)) with
                     "The leaked heap cann't be encapsulated into predicate" ->
-                         externalprint_post (lines_from_files s) s (updateheap_withlocalname (filter_lheap (check_leaked_returned_value env heap_leak) (print_predicates)) env)  (determine_no (search_context_stack_post !contextStack)) 
-                |   predicatename -> 
-                        (auto_close_stmt (((Leak_chunk(predicatename, ((check_local_name (malloc_name heap_leak predicatename) env) :: (check_other_predicate_parameters predicatename (print_predicates))))) :: remove_dummy_leaks(update_leak heap_leak predicatename (print_predicates)))) l env)
-    
+                         externalprint_post (lines_from_files s) s (updateheap_withlocalname (*filter_lheap*) (check_leaked_returned_value env heap_leak) (*(print_predicates)*) env)  (determine_no (search_context_stack_post !contextStack)) 
+                |   predicatename ->
+                        (auto_close_stmt (((Leak_chunk(predicatename, ((check_local_name (malloc_name heap_leak predicatename) env) :: (check_other_predicate_parameters predicatename (print_predicates))))) :: remove_dummy_leaks(update_leak heap_leak predicatename (print_predicates)))) l env)    
           
         
 (*I will assume in the following function that the name of preducate should be the same as the name of the struct*)        
@@ -2373,8 +2367,7 @@ let check_missingheap predname targs parameters env l =
         match parameters with
             [] -> ()
         |   x :: parameters -> iter parameters
-    in iter parameters
-        
+    in iter parameters        
         
 
 let rec check_locality infered_count cs row = 
@@ -2413,16 +2406,8 @@ let rec create_assum_exp assumptions =
             else
                 create_assum_exp assumptions
 
-
-(*Mahmoud: all functions with a name starting by test should be removed at the end*)
-let rec test_print_assumptions assumptions_list =
-    match assumptions_list with
-        [] -> ()
-    |   (leftoperand, rightoperand, addition) :: assumptions_list -> (test_print_assumptions assumptions_list)
-    
     
 let rec solve_assump_equations assumptions_list infered_count (counter: int) =
-    (*printnow "%s \n" infered_count;*)
     match assumptions_list with
         [] -> (Printf.sprintf "%s%s%i" infered_count "-" counter)
     |   (left, right, value) :: partial_assumptions_list ->
@@ -2503,16 +2488,24 @@ let rec parameters_list parameters row =
 let rec parameters_list0 parameters row =
     match parameters with
         [] -> []
-    |   x :: parameters -> (*printnow "%s: %s \n" "I am printing x" x;*)
-            if((try(Str.search_forward (Str.regexp "count") x 0) with Not_found -> -1) > -1) then
-                ((check_infered_conut x !contextStack row) :: (parameters_list0 parameters row))
+    |   x :: parameters ->  
+            if((try(Str.search_forward (Str.regexp "^count") x 0) with Not_found -> -1) > -1) then
+                begin 
+                (check_infered_conut x !contextStack row) :: (parameters_list0 parameters row)
+                end
             else
-                ((check_ghostlocal_name x !contextStack row) :: (parameters_list0 parameters row))   
+                begin
+                (check_ghostlocal_name x !contextStack row) :: (parameters_list0 parameters row)
+                end  
+
+
+(*The following function search in the heap if the missing heap can be decapsulated from  a predicate that is already in the heap*)
+(*If this is the case, it just included an open command before the error line*)
                     
 let rec search_heap predname heap r parameters0 =
     match heap with
         [] -> ""
-    |   Leak_chunk(predicatename, parameters) :: heap -> printnow "%s %s \n" predname predicatename;
+    |   Leak_chunk(predicatename, parameters) :: heap ->
             if(predname = predicatename) then
                 match parameters with
                     [] -> search_heap predname heap r parameters0
@@ -2526,10 +2519,29 @@ let rec search_heap predname heap r parameters0 =
                                     search_heap predname heap r parameters0
             else 
                 search_heap predname heap r parameters0
-                
+
+let extractpredicatename predname predmap0 =
+    let rec iter0 predname0 predmap0 =    
+        let rec iter predmap =
+            match predmap with 
+                (*[] -> iter0 (String.sub predname 0 (try (String.rindex predname '_') with Not_found -> (String.length predname))) predmap0*)
+                [] ->
+                    begin
+                    match (try (String.rindex predname0 '_') with Not_found -> -1) with
+                        -1 -> predname
+                    |   _  -> (iter0 (String.sub predname0 0 (try (String.rindex predname0 '_') with Not_found -> (String.length predname0))) predmap0)
+                    end            
+                |   (predicatename, parameters, body) :: rest->
+                    if(predname0 = predicatename) then
+                        predname0
+                    else
+                        iter rest
+        in iter predmap0
+    in iter0 predname predmap0            
+                    
 
  
-let print_missingheap_precondition predname targs parameters h env=
+let print_missingheap_precondition predname targs parameters h env =
     if(autofix) then begin
         let context =
              match !contextStack with 
@@ -2557,16 +2569,17 @@ let print_missingheap_precondition predname targs parameters h env=
                 let heap = create_partial_heap h env in             
                     match l with
                         ((s, r, col), (s1, r1, col1)) ->
-                            let predicatename = (String.sub predname 0 (try (String.index predname '_') with Not_found -> (String.length predname))) 
+                            (*Todo: extracting the name of the predicate from predname should be more generic. Now, I consider the name as a substring of predname to the last '_'*)
+                            let predicatename = extractpredicatename predname (print_predicates)(*(String.sub predname 0 (try (String.rindex predname '_') with Not_found -> (String.length predname)))*) 
                             in
                             let message = (search_heap predicatename heap r parameters) in
                                 if(message = "") then
-                                   let message = Printf.sprintf "%s%s%s%s" (*(String.sub predname 0 (String.index predname '_'))*) predicatename "(" (String.concat "," (parameters_list0 parameters r)) ")" 
-                                    in 
+                                   let message = Printf.sprintf "%s%s%s%s" predicatename "(" (String.concat "," (parameters_list0 parameters r)) ")" 
+                                   in 
                                         externalprint_pre (lines_from_files s) s message (print_line ((determine_no (search_context_stack_pre !contextStack))));   
                                 else
-                                    externalprint_open_stmt (lines_from_files s) s message (r-1);
-                                    if((try (Str.search_forward (Str.regexp "count[0-9]*") message 0) with Not_found -> -1) > -1) then
+                                   externalprint_open_stmt (lines_from_files s) s message (r-1);
+                                   if((try (Str.search_forward (Str.regexp "count[0-9]*") message 0) with Not_found -> -1) > -1) then
                                         let message1 = Str.matched_string message in
                                             if((try (Str.search_forward (Str.regexp "[-][0-9]+") message 0) with Not_found -> -1) > -1) then
                                                 let message2 = Printf.sprintf "%s %s %s" message1 ">" (String.sub (Str.matched_string message) 1 ((String.length (Str.matched_string message)) - 1)) in

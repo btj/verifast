@@ -20,7 +20,7 @@ let common_keywords = [
 ]
 
 let ghost_keywords = [
-  "predicate"; "copredicate"; "autogen"; "Many"; "requires"; "|->"; "&*&"; "inductive"; "fixpoint";
+  "predicate"; "copredicate"; "autogen"; "autogencounter"; "Many"; "ghostcount"; "requires"; "|->"; "&*&"; "inductive"; "fixpoint";
   "ensures"; "close"; "lemma"; "open"; "emp"; "invariant"; "lemma_auto";
   "_"; "@*/"; "predicate_family"; "predicate_family_instance"; "predicate_ctor"; "leak"; "@";
   "box_class"; "action"; "handle_predicate"; "preserved_by"; "consuming_box_predicate"; "consuming_handle_predicate"; "perform_action"; "nonghost_callers_only";
@@ -500,6 +500,7 @@ and
   | [< '(l, Kwd "fixpoint"); t = parse_return_type; d = parse_func_rest Fixpoint t Public>] -> [d]
   | [< '(l, Kwd "predicate"); result = parse_predicate_decl l Inductiveness_Inductive >] -> result
   | [< '(l, Kwd "autogen"); '(_, Ident g); '(_, Kwd "="); '(_, Kwd "Many"); '(_, Ident g1) >] -> Autogen(g,g1) :: []
+  | [< '(l, Kwd "autogencounter"); '(_, Ident g); '(_, Kwd "."); '(_, Ident g1) ; '(_, Kwd "->"); '(_, Kwd "ghostcount"); '(_, Kwd "="); '(_, Ident g2); '(_, Kwd "."); '(_, Ident g3) >] -> Autogencounter((g,g1),(g2,g3)) :: [] 
   | [< '(l, Kwd "copredicate"); result = parse_predicate_decl l Inductiveness_CoInductive >] -> result
   | [< '(l, Kwd "predicate_family"); '(_, Ident g); is = parse_paramlist; (ps, inputParamCount) = parse_pred_paramlist; '(_, Kwd ";") >]
   -> [PredFamilyDecl (l, g, [], List.length is, List.map (fun (t, p) -> t) ps, inputParamCount, Inductiveness_Inductive)]

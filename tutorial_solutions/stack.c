@@ -15,14 +15,13 @@ predicate node (struct node *node; int count) =
 @*/
 
 
-struct node {    	struct node *next;	
+struct node {    			struct node *next;	
 	int value;
 };	
 
 struct stack 
 {    
-	struct node *head;
-	
+	struct node *head;	
 };
 
 

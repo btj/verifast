@@ -2156,6 +2156,13 @@ let print_context_stack_test cs =
                       modify (succ i) nextline 
                       end
              in modify 1 file_lines
+
+
+  let rec test_print_heap lheap =
+    match lheap with
+        [] -> ()
+    |   Leak_chunk(name, parameters) :: rest_heap ->
+            printnow "Heap: %s \n" name; test_print_heap rest_heap
   
   let rec check_existance_heap predicate_body l_heap = 
     match l_heap with
@@ -2328,26 +2335,36 @@ let rec check_other_predicate_parameters predicatename predicatemap =
             else check_other_predicate_parameters predicatename predicatemap 
                     
  (*The following function filters the leaked heap and produce only chunks that should be written in the post condition and not be consumed at the end of the function*)
- let rec filter_lheap lheap predmap = 
+
+let rec filter_lheap lheap predmap = test_print_heap lheap;
     match lheap with
         [] -> []
     |   Leak_chunk (name, arguments) :: lheap ->
-            let rec iter predmap0 =
-                match predmap0 with
-                    [] -> Leak_chunk(name, arguments) :: filter_lheap lheap predmap
-                |   (predname, parameters, body) :: predmap0 ->
-                        let rec iter0 body =
-                            match body with
-                                [] -> iter predmap0
-                            |   Inner_pred (innerpredicatename, parameters) :: body ->
-                                    if(name = innerpredicatename) then
-                                        filter_lheap lheap predmap
+            let rec iter lheap predmap0 =
+                match lheap with
+                    []  -> Leak_chunk (name, arguments) :: filter_lheap lheap predmap
+                |   Leak_chunk (name0, arguments0) :: lheap0 ->
+                        let rec iter0 predmap1 =
+                            match predmap1 with
+                                [] -> iter lheap0 predmap
+                            |   (predname, parameters, body) :: predmap1 ->
+                                    if(predname = name0) then
+                                        let rec iter1 body =
+                                            match body with
+                                                [] -> iter0 predmap1
+                                            |   Inner_pred(innerpredicatename, parameters) :: body ->
+                                                    if(name = innerpredicatename) then
+                                                        filter_lheap lheap predmap
+                                                    else
+                                                        iter1 body
+                                            |   _ :: body ->
+                                                    iter1 body
+                                        in iter1 body                                    
                                     else
-                                        iter0 body
-                            |   _ :: body ->
-                                    iter0 body
-                        in iter0 body
-            in iter predmap
+                                        iter0 predmap1
+                                        
+                        in iter0 predmap0
+            in iter lheap predmap  
                                                             
         
 let rec auto_close_stmt heap_leak l env= 
@@ -2356,8 +2373,8 @@ let rec auto_close_stmt heap_leak l env=
             ((s, r, col), (s1, r1, col1)) ->
                 match (auto_close_predicate heap_leak (print_predicates)) with
                     "The leaked heap cann't be encapsulated into predicate" ->
-                         externalprint_post (lines_from_files s) s (updateheap_withlocalname (*filter_lheap*) (check_leaked_returned_value env heap_leak) (*(print_predicates)*) env)  (determine_no (search_context_stack_post !contextStack)) 
-                |   predicatename ->
+                         externalprint_post (lines_from_files s) s (updateheap_withlocalname (filter_lheap (check_leaked_returned_value env heap_leak) (print_predicates)) env)  (determine_no (search_context_stack_post !contextStack)) 
+                |   predicatename -> printnow "%s \n" predicatename;
                         (auto_close_stmt (((Leak_chunk(predicatename, ((check_local_name (malloc_name heap_leak predicatename) env) :: (check_other_predicate_parameters predicatename (print_predicates))))) :: remove_dummy_leaks(update_leak heap_leak predicatename (print_predicates)))) l env)    
           
         

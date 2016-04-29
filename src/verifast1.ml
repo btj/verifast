@@ -1772,6 +1772,7 @@ let print_context_stack_test cs =
   
   (*By Mahmoud: The following is Automated VeriFast core *)
   
+  (*return a seperate list of all the autogen annotations*)
   let autgendeclmap=
     if(autofix || genPredicate) then begin
         let rec iter autodm ds =
@@ -1779,6 +1780,22 @@ let print_context_stack_test cs =
                 [] -> []
              |  Autogen(s1, s2) :: ds -> Autogen(s1, s2) :: iter autodm ds 
              | _ :: ds -> iter autodm ds
+        in
+        match ps with
+          [PackageDecl(_,"",[],ds)] -> iter [] ds
+        | _ when file_type path=Java -> []
+    end
+    else
+     []
+
+  (*return a seperate list of all autogencounter annotations*)
+  let autgencounterdeclmap=
+    if(autofix || genPredicate) then begin
+        let rec iter autogencountdm ds =
+            match ds with 
+                [] -> []
+             |  Autogencounter((s1, s2),(s3,s4)) :: ds -> Autogencounter((s1, s2),(s3,s4)) :: iter autogencountdm ds 
+             | _ :: ds -> iter autogencountdm ds
         in
         match ps with
           [PackageDecl(_,"",[],ds)] -> iter [] ds
@@ -2054,13 +2071,26 @@ let print_context_stack_test cs =
                 output_string_file oc y; 
                 output_string_file oc "("; 
                 output_string_file oc (find_fieldname fields y oc); 
-                output_string_file oc ", count)";   
+                output_string_file oc ", ";
+                output_string_file oc y;                
+                output_string_file oc "_count1)";   
                 (print_autogen_fields structname fields autogenmap oc)
                 end
             else 
                 (print_autogen_fields structname fields autogenmap oc)
   
-  
+  let rec check_other_counters autogenmap structname oc=
+    match autogenmap with
+        [] -> ()
+    |   Autogen(x,y) :: autogenmap ->
+            if(x = structname) then
+                begin
+                output_string_file oc ", ";
+                output_string_file oc "int ";
+                output_string_file oc y;
+                output_string_file oc "_count1";
+                check_other_counters autogenmap structname oc
+                end 
       
   let rec check_contain_llist autogenmap structname oc flag=
     match autogenmap with
@@ -2070,17 +2100,21 @@ let print_context_stack_test cs =
             else
                output_string_file oc "; \n"
     |   Autogen(x, y) :: autogenmap ->  
-                if(x = structname) then 
+            if(x = structname) then 
+                begin
+                if (flag = 0) then 
                     begin
-                    if (flag = 0) then 
-                        begin
-                        (output_string_file oc "; int count) = \n")
-                        end
-                    else 
-                        (output_string_file oc " &*& count >= 0; \n")
+                    output_string_file oc "; int ";
+                    output_string_file oc y;
+                    output_string_file oc "_count1";
+                    check_other_counters autogenmap structname oc;
+                    output_string_file oc ") = \n"
                     end
                 else 
-                    check_contain_llist autogenmap structname oc flag
+                    (output_string_file oc " &*& count >= 0; \n")
+                end
+            else 
+                check_contain_llist autogenmap structname oc flag
   
                 
   let print_inner_structure structname structure autogenmap oc =

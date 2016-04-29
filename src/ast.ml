@@ -640,6 +640,7 @@ and
       handle_pred_decl list
   (* enum def met line - name - elements *)
   | Autogen of string * string
+  | Autogencounter of (string * string) * (string * string)
   | EnumDecl of loc * string * (string * expr option) list
   | Global of loc * type_expr * string * expr option
   | UnloadableModuleDecl of loc

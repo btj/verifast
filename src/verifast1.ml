@@ -1789,7 +1789,7 @@ let print_context_stack_test cs =
      []
 
   (*return a seperate list of all autogencounter annotations*)
-  let autgencounterdeclmap=
+  let autogencounterdeclmap=
     if(autofix || genPredicate) then begin
         let rec iter autogencountdm ds =
             match ds with 
@@ -2092,6 +2092,52 @@ let print_context_stack_test cs =
                 check_other_counters autogenmap structname oc
                 end 
       
+  let rec check_autogencounter autogencountermap oc structname autogenmap = 
+    match autogencountermap with
+        [] -> ()
+    |   Autogencounter((predicatename, predicatefield),(predicatename1,predicatefield1)) :: autogencountermap ->
+            if(predicatename <> predicatename1) then
+                output_string_file oc "\n Error in autogencounter annotations \n"
+            else if(predicatename <> structname) then
+                check_autogencounter autogencountermap oc structname autogenmap
+            else
+                begin
+                let rec iter autogenmap0 =
+                    match autogenmap0 with 
+                        [] -> check_autogencounter autogencountermap oc structname autogenmap
+                    |   Autogen(x, y) :: autogenmap0 ->
+                            if(x = structname) then
+                                if(y = predicatefield) then
+                                    begin
+                                    output_string_file oc " &*& ";
+                                    output_string_file oc y;
+                                    output_string_file oc "_count1 = ";
+                                    output_string_file oc predicatefield1;
+                                    check_autogencounter autogencountermap oc structname autogenmap
+                                    end
+                                else
+                                    iter autogenmap0
+                            else
+                                iter autogenmap0
+                in iter autogenmap 
+                end           
+                                
+                               
+    let rec print_counter_constraints autogencountermap oc structname =
+    match autogencountermap with
+        [] -> output_string_file oc "; \n"
+    |   Autogencounter((predicatename, fieldname),(predicatename1, fieldname1)) :: rest ->
+            if(predicatename = structname) then
+                begin
+                output_string_file oc " &*& ";
+                output_string_file oc fieldname;
+                output_string_file oc "_count1 >=0";
+                print_counter_constraints rest oc structname                
+                end
+            else                             
+                print_counter_constraints rest oc structname
+
+
   let rec check_contain_llist autogenmap structname oc flag=
     match autogenmap with
         [] -> 
@@ -2099,7 +2145,7 @@ let print_context_stack_test cs =
                output_string_file oc ";) = \n"
             else
                output_string_file oc "; \n"
-    |   Autogen(x, y) :: autogenmap ->  
+    |   Autogen(x, y) :: autogenmap0 ->  
             if(x = structname) then 
                 begin
                 if (flag = 0) then 
@@ -2107,14 +2153,18 @@ let print_context_stack_test cs =
                     output_string_file oc "; int ";
                     output_string_file oc y;
                     output_string_file oc "_count1";
-                    check_other_counters autogenmap structname oc;
+                    check_other_counters autogenmap0 structname oc;
                     output_string_file oc ") = \n"
                     end
                 else 
-                    (output_string_file oc " &*& count >= 0; \n")
+                    begin
+                    check_autogencounter (autogencounterdeclmap) oc structname autogenmap;
+                    print_counter_constraints (autogencounterdeclmap) oc structname
+                    (*(output_string_file oc " &*& count >= 0; \n")*)
+                    end
                 end
             else 
-                check_contain_llist autogenmap structname oc flag
+                check_contain_llist autogenmap0 structname oc flag
   
                 
   let print_inner_structure structname structure autogenmap oc =
@@ -2191,13 +2241,6 @@ let print_context_stack_test cs =
                       end
              in modify 1 file_lines
 
-
-  let rec test_print_heap lheap =
-    match lheap with
-        [] -> ()
-    |   Leak_chunk(name, parameters) :: rest_heap ->
-            printnow "Heap: %s \n" name; test_print_heap rest_heap
-  
   let rec check_existance_heap predicate_body l_heap = 
     match l_heap with
         [] -> false
@@ -2209,7 +2252,7 @@ let print_context_stack_test cs =
                         else check_existance_heap predicate_body rest_heap
             |   Inner_pred (innerpredicatename, paramters) -> true         
            
-let rec consume_leak_intopredicate l_heap predicatebody =
+ let rec consume_leak_intopredicate l_heap predicatebody =
     match predicatebody with
         [] -> true
     |   bodyfirst :: bodyrest -> 
@@ -2217,14 +2260,14 @@ let rec consume_leak_intopredicate l_heap predicatebody =
                 consume_leak_intopredicate l_heap bodyrest 
             else false
 
-let rec return_encapspredicate predicatename (predmap: predicate_map) =
+ let rec return_encapspredicate predicatename (predmap: predicate_map) =
     match predmap with
         (predname, predicateparam, predicatebody) :: predmap ->
             if(predicatename = predname)
                 then (predname, predicateparam, predicatebody)
                 else return_encapspredicate predicatename predmap
 
-let remove_encapsulated_chunk predbody l_chunk chunkname =
+ let remove_encapsulated_chunk predbody l_chunk chunkname =
     let rec iter predbody =
         match predbody with
             [] -> l_chunk
@@ -2241,7 +2284,7 @@ let remove_encapsulated_chunk predbody l_chunk chunkname =
         
 
 
-let update_leak l_heap predicatename (predmap: predicate_map) =
+ let update_leak l_heap predicatename (predmap: predicate_map) =
     match (return_encapspredicate predicatename predmap) with
         (predname, predicateparam, predicatebody) -> 
             let rec iter (l_heap : leaked_heap) =
@@ -2251,7 +2294,7 @@ let update_leak l_heap predicatename (predmap: predicate_map) =
                         (remove_encapsulated_chunk predicatebody (Leak_chunk(name, parameters)) name) :: iter rest
             in iter l_heap
                 
-let rec remove_dummy_leaks l_heap =
+ let rec remove_dummy_leaks l_heap =
     match l_heap with
         [] -> []
     |   Leak_chunk(name, parameters) :: l_heap ->
@@ -2261,7 +2304,7 @@ let rec remove_dummy_leaks l_heap =
     
 
 
-let rec auto_close_predicate (l_heap: leaked_heap) (predmap: predicate_map) =
+ let rec auto_close_predicate (l_heap: leaked_heap) (predmap: predicate_map) =
     match predmap with
         [] -> "The leaked heap cann't be encapsulated into predicate"
     |   (predicatename, predicateparam, predicatebody) :: predmap ->
@@ -2272,7 +2315,7 @@ let rec auto_close_predicate (l_heap: leaked_heap) (predmap: predicate_map) =
 
 (*The followoing function just take the predicate name and look at the heap to exact the struct name that is represented by this predicate name. It does that by checking the malloc_block struct heap chunk*)
 
-let rec malloc_name leak predicatename=
+ let rec malloc_name leak predicatename=
     match leak with
         [] -> ""
     |   Leak_chunk(name, parameters) :: rest_heap ->
@@ -2290,9 +2333,9 @@ let rec malloc_name leak predicatename=
             else
                 malloc_name rest_heap predicatename 
         
-let check_leak_existance h env = return_leaked_heap h env
+ let check_leak_existance h env = return_leaked_heap h env
 
-let rec check_local_name name env =
+ let rec check_local_name name env =
     match env with
         [] -> name
     |   (s, t) :: env -> 
@@ -2302,7 +2345,7 @@ let rec check_local_name name env =
                check_local_name name env
             end
 
-let rec updateheap_withlocalname leaked_heap env =
+ let rec updateheap_withlocalname leaked_heap env =
     match leaked_heap with
         [] -> []
     |   Leak_chunk(name, parameters) :: rest -> 
@@ -2317,7 +2360,7 @@ let rec updateheap_withlocalname leaked_heap env =
             Leak_chunk(check_local_name name env, localparameters) :: (updateheap_withlocalname rest env)
 
 
-let rec check_local_name0 name cs row=
+ let rec check_local_name0 name cs row=
     match cs with
         [] -> ""
     |   Executing (h, env, l, msg) :: cs ->
@@ -2341,7 +2384,7 @@ let rec check_local_name0 name cs row=
     |   _ :: cs -> check_local_name0 name cs row
       
 
-let check_ghostlocal_name name cs row = 
+ let check_ghostlocal_name name cs row = 
     match name with
         "_" ->       
             let rec check_ghost_exist i =
@@ -2354,7 +2397,7 @@ let check_ghostlocal_name name cs row =
     |   _ -> check_local_name0 name cs row
                    
 
-let rec check_other_predicate_parameters predicatename predicatemap =
+ let rec check_other_predicate_parameters predicatename predicatemap =
     match predicatemap with
         [] -> []
     |   (name, parameters, body) :: predicatemap -> 
@@ -2370,7 +2413,7 @@ let rec check_other_predicate_parameters predicatename predicatemap =
                     
  (*The following function filters the leaked heap and produce only chunks that should be written in the post condition and not be consumed at the end of the function*)
 
-let rec filter_lheap lheap predmap = test_print_heap lheap;
+ let rec filter_lheap lheap predmap =
     match lheap with
         [] -> []
     |   Leak_chunk (name, arguments) :: lheap ->

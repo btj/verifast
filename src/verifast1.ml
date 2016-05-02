@@ -2127,7 +2127,7 @@ let print_context_stack_test cs =
                                     begin
                                     output_string_file oc " &*& ";
                                     output_string_file oc y;
-                                    output_string_file oc "_count1 = ";
+                                    output_string_file oc "_count1 == ";
                                     output_string_file oc predicatefield1;
                                     check_autogencounter autogencountermap oc structname autogenmap
                                     end

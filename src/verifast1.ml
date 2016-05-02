@@ -2123,15 +2123,15 @@ let print_context_stack_test cs =
                 end           
                                 
                                
-    let rec print_counter_constraints autogencountermap oc structname =
-    match autogencountermap with
+    let rec print_counter_constraints autogenmap oc structname =
+    match autogenmap with
         [] -> output_string_file oc "; \n"
-    |   Autogencounter((predicatename, fieldname),(predicatename1, fieldname1)) :: rest ->
-            if(predicatename = structname) then
+    |   Autogen(x,y) :: rest ->
+            if(x = structname) then
                 begin
                 output_string_file oc " &*& ";
-                output_string_file oc fieldname;
-                output_string_file oc "_count1 >=0";
+                output_string_file oc y;
+                output_string_file oc "_count1 >= 0";
                 print_counter_constraints rest oc structname                
                 end
             else                             
@@ -2158,8 +2158,11 @@ let print_context_stack_test cs =
                     end
                 else 
                     begin
-                    check_autogencounter (autogencounterdeclmap) oc structname autogenmap;
-                    print_counter_constraints (autogencounterdeclmap) oc structname
+                    let autogencountermap = (autogencounterdeclmap) in
+                        begin
+                        check_autogencounter autogencountermap oc structname autogenmap;
+                        print_counter_constraints autogenmap oc structname
+                        end
                     (*(output_string_file oc " &*& count >= 0; \n")*)
                     end
                 end
@@ -2406,8 +2409,12 @@ let print_context_stack_test cs =
                     match parameters with
                         [] -> []
                         (*The following line also depends on the assumption that the struct name is the same as the predicate name*)
-                    |   (ttype, paramname) :: parameters -> if(ttype <> predicatename) then begin 
-                            if(paramname = "count") then "0" :: (iter parameters) else (Printf.sprintf "%s%i" paramname 0) :: (iter parameters) end else iter parameters
+                    |   (ttype, paramname) :: parameters -> if(ttype <> predicatename) then 
+                            begin 
+                            if((try(Str.search_forward (Str.regexp "_count1") paramname 0) with Not_found -> -1) > -1) then 
+                                "0" :: (iter parameters) else (Printf.sprintf "%s%i" paramname 0) :: (iter parameters) 
+                            end 
+                            else iter parameters
               in iter parameters
             else check_other_predicate_parameters predicatename predicatemap 
                     

@@ -144,7 +144,7 @@ module Scala = struct
     parse_primary_expr = parser
       [< '(l, Kwd "true") >] -> True l
     | [< '(l, Kwd "false") >] -> False l
-    | [< '(l, Int n) >] -> IntLit (l, n, ref None)
+    | [< '(l, Int n) >] -> IntLit (l, n)
     | [< '(l, Ident x) >] -> Var (l, x)
   and
     parse_add_expr = parser
@@ -707,27 +707,24 @@ and
      t = begin parser
        [< '(_, Kwd "int") >] -> ManifestTypeExpr (l, intType);
      | [< '(_, Kwd "double") >] -> ManifestTypeExpr (l, LongDouble);
-     | [< '(_, Kwd "long") >] -> raise (ParseException (l, "long long types are not yet supported."));
+     | [< '(_, Kwd "long"); _ = opt (parser [< '(_, Kwd "int") >] -> ()) >] -> ManifestTypeExpr (l, Int (Signed, 8))
      | [< >] -> ManifestTypeExpr (l, intType)
      end
    >] -> t
 | [< '(l, Kwd "signed"); t0 = parse_primary_type >] ->
   (match t0 with
-     (ManifestTypeExpr (_, Int (Signed, 4)) | ManifestTypeExpr (_, Int (Signed, 2)) |
-      ManifestTypeExpr (_, Int (Signed, 1))) -> t0
+     (ManifestTypeExpr (_, Int (Signed, _))) -> t0
    | _ -> raise (ParseException (l, "This type cannot be signed.")))
 | [< '(l, Kwd "unsigned"); t0 = parse_primary_type >] ->
   (match t0 with
-     ManifestTypeExpr (l, Int (Signed, 4)) -> ManifestTypeExpr (l, Int (Unsigned, 4))
-   | ManifestTypeExpr (l, Int (Signed, 2)) -> ManifestTypeExpr (l, Int (Unsigned, 2))
-   | ManifestTypeExpr (l, Int (Signed, 1)) -> ManifestTypeExpr (l, Int (Unsigned, 1))
+   | ManifestTypeExpr (l, Int (Signed, n)) -> ManifestTypeExpr (l, Int (Unsigned, n))
    | _ -> raise (ParseException (l, "This type cannot be unsigned.")))
 | [< '(l, Kwd "uintptr_t") >] -> ManifestTypeExpr (l, Int (Unsigned, 4))
 | [< '(l, Kwd "real") >] -> ManifestTypeExpr (l, RealType)
 | [< '(l, Kwd "bool") >] -> ManifestTypeExpr (l, Bool)
 | [< '(l, Kwd "boolean") >] -> ManifestTypeExpr (l, Bool)
 | [< '(l, Kwd "void") >] -> ManifestTypeExpr (l, Void)
-| [< '(l, Kwd "char") >] -> ManifestTypeExpr (l, Int (Signed, 1))
+| [< '(l, Kwd "char") >] -> ManifestTypeExpr (l, match !language with CLang -> Int (Signed, 1) | Java -> Int (Unsigned, 2))
 | [< '(l, Kwd "byte") >] -> ManifestTypeExpr (l, Int (Signed, 1))
 | [< '(l, Kwd "predicate");
      '(_, Kwd "(");
@@ -1218,7 +1215,10 @@ and
   parse_expr_primary = parser
   [< '(l, Kwd "true") >] -> True l
 | [< '(l, Kwd "false") >] -> False l
-| [< '(l, CharToken c) >] -> IntLit(l, big_int_of_int (Char.code c), ref (Some (Int (Signed, 1))))
+| [< '(l, CharToken c) >] ->
+  if Char.code c > 127 then raise (ParseException (l, "Non-ASCII character literals are not yet supported"));
+  let tp = match !language with CLang -> Int (Signed, 1) | Java -> Int (Unsigned, 2) in
+  CastExpr (l, false, ManifestTypeExpr (l, tp), IntLit (l, big_int_of_int (Char.code c)))
 | [< '(l, Kwd "null") >] -> Null l
 | [< '(l, Kwd "currentThread") >] -> Var (l, "currentThread")
 | [< '(l, Kwd "varargs") >] -> Var (l, "varargs")
@@ -1253,20 +1253,20 @@ and
       >]-> r
     | [< >] -> Var (lx, x)
   >] -> ex
-| [< '(l, Int i) >] -> IntLit (l, i, ref None)
+| [< '(l, Int i) >] -> IntLit (l, i)
 | [< '(l, RealToken i) >] -> RealLit (l, num_of_big_int i)
 | [< '(l, RationalToken n) >] -> RealLit (l, n)
-| [< '(l, Kwd "INT_MIN") >] -> IntLit (l, big_int_of_string "-2147483648", ref None)
-| [< '(l, Kwd "INT_MAX") >] -> IntLit (l, big_int_of_string "2147483647", ref None)
-| [< '(l, Kwd "UINTPTR_MAX") >] -> IntLit (l, big_int_of_string "4294967295", ref None)
-| [< '(l, Kwd "UCHAR_MAX") >] -> IntLit (l, big_int_of_string "255", ref None)
-| [< '(l, Kwd "USHRT_MAX") >] -> IntLit (l, big_int_of_string "65535", ref None)
-| [< '(l, Kwd "UINT_MAX") >] -> IntLit (l, big_int_of_string "4294967295", ref None)
+| [< '(l, Kwd "INT_MIN") >] -> IntLit (l, big_int_of_string "-2147483648")
+| [< '(l, Kwd "INT_MAX") >] -> IntLit (l, big_int_of_string "2147483647")
+| [< '(l, Kwd "UINTPTR_MAX") >] -> CastExpr (l, false, ManifestTypeExpr (l, Int (Unsigned, 4)), IntLit (l, big_int_of_string "4294967295"))
+| [< '(l, Kwd "UCHAR_MAX") >] -> IntLit (l, big_int_of_string "255")
+| [< '(l, Kwd "USHRT_MAX") >] -> IntLit (l, big_int_of_string "65535")
+| [< '(l, Kwd "UINT_MAX") >] -> CastExpr (l, false, ManifestTypeExpr (l, Int (Unsigned, 4)), IntLit (l, big_int_of_string "4294967295"))
 | [< '(l, String s); ss = rep (parser [< '(_, String s) >] -> s) >] -> 
      (* TODO: support UTF-8 *)
      if !lexer_in_ghost_range then
        let chars = chars_of_string s in
-       let es = List.map (fun c -> IntLit(l, big_int_of_int (Char.code c), ref (Some (Int (Signed, 1))))) chars in
+       let es = List.map (fun c -> IntLit(l, big_int_of_int (Char.code c))) chars in
        InitializerList(l, es)
      else
        StringLit (l, String.concat "" (s::ss))
@@ -1302,11 +1302,11 @@ and
 | [< '(l, Kwd "~"); e = parse_expr_suffix >] -> Operation (l, BitNot, [e])
 | [< '(l, Kwd "-"); e = parse_expr_suffix >] ->
   begin match e with
-    IntLit (_, n, t) -> IntLit (l, minus_big_int n, t)
-  | _ -> Operation (l, Sub, [IntLit (l, zero_big_int, ref None); e])
+    IntLit (_, n) -> IntLit (l, minus_big_int n)
+  | _ -> Operation (l, Sub, [IntLit (l, zero_big_int); e])
   end
-| [< '(l, Kwd "++"); e = parse_expr_suffix >] -> AssignOpExpr (l, e, Add, IntLit (l, unit_big_int, ref None), false, ref None, ref None)
-| [< '(l, Kwd "--"); e = parse_expr_suffix >] -> AssignOpExpr (l, e, Sub, IntLit (l, unit_big_int, ref None), false, ref None, ref None)
+| [< '(l, Kwd "++"); e = parse_expr_suffix >] -> AssignOpExpr (l, e, Add, IntLit (l, unit_big_int), false)
+| [< '(l, Kwd "--"); e = parse_expr_suffix >] -> AssignOpExpr (l, e, Sub, IntLit (l, unit_big_int), false)
 | [< '(l, Kwd "{"); es = rep_comma parse_expr; '(_, Kwd "}") >] -> InitializerList (l, es)
 and
   parse_switch_expr_clauses = parser
@@ -1341,8 +1341,8 @@ and
           end
        >] -> e
      end; e = parse_expr_suffix_rest e >] -> e
-| [< '(l, Kwd "++"); e = parse_expr_suffix_rest (AssignOpExpr (l, e0, Add, IntLit (l, unit_big_int, ref None), true, ref None, ref None)) >] -> e
-| [< '(l, Kwd "--"); e = parse_expr_suffix_rest (AssignOpExpr (l, e0, Sub, IntLit (l, unit_big_int, ref None), true, ref None, ref None)) >] -> e
+| [< '(l, Kwd "++"); e = parse_expr_suffix_rest (AssignOpExpr (l, e0, Add, IntLit (l, unit_big_int), true)) >] -> e
+| [< '(l, Kwd "--"); e = parse_expr_suffix_rest (AssignOpExpr (l, e0, Sub, IntLit (l, unit_big_int), true)) >] -> e
 | [< '(l, Kwd "("); es = rep_comma parse_expr; '(_, Kwd ")"); e = parse_expr_suffix_rest (match e0 with Read(l', e0', f') -> CallExpr (l', f', [], [], LitPat(e0'):: (List.map (fun e -> LitPat(e)) es), Instance) | _ -> ExprCallExpr (l, e0, es)) >] -> e
 | [< >] -> e0
 and
@@ -1426,17 +1426,17 @@ and
 and
   parse_assign_expr_rest e0 = parser
   [< '(l, Kwd "="); e1 = parse_assign_expr >] -> AssignExpr (l, e0, e1)
-| [< '(l, Kwd "+="); e1 = parse_assign_expr >] -> AssignOpExpr (l, e0, Add, e1, false, ref None, ref None)
-| [< '(l, Kwd "-="); e1 = parse_assign_expr >] -> AssignOpExpr (l, e0, Sub, e1, false, ref None, ref None)
-| [< '(l, Kwd "*="); e1 = parse_assign_expr >] -> AssignOpExpr (l, e0, Mul, e1, false, ref None, ref None)
-| [< '(l, Kwd "/="); e1 = parse_assign_expr >] -> AssignOpExpr (l, e0, Div, e1, false, ref None, ref None)
-| [< '(l, Kwd "&="); e1 = parse_assign_expr >] -> AssignOpExpr (l, e0, And, e1, false, ref None, ref None)
-| [< '(l, Kwd "|="); e1 = parse_assign_expr >] -> AssignOpExpr (l, e0, Or, e1, false, ref None, ref None)
-| [< '(l, Kwd "^="); e1 = parse_assign_expr >] -> AssignOpExpr (l, e0, Xor, e1, false, ref None, ref None)
-| [< '(l, Kwd "%="); e1 = parse_assign_expr >] -> AssignOpExpr (l, e0, Mod, e1, false, ref None, ref None)
-| [< '(l, Kwd "<<="); e1 = parse_assign_expr >] -> AssignOpExpr (l, e0, ShiftLeft, e1, false, ref None, ref None)
-| [< '(l, Kwd ">>="); e1 = parse_assign_expr >] -> AssignOpExpr (l, e0, ShiftRight, e1, false, ref None, ref None)
-(*| [< '(l, Kwd ">>>="); e1 = parse_assign_expr >] -> AssignOpExpr (l, e0, ???, e1, false, ref None, ref None)*)
+| [< '(l, Kwd "+="); e1 = parse_assign_expr >] -> AssignOpExpr (l, e0, Add, e1, false)
+| [< '(l, Kwd "-="); e1 = parse_assign_expr >] -> AssignOpExpr (l, e0, Sub, e1, false)
+| [< '(l, Kwd "*="); e1 = parse_assign_expr >] -> AssignOpExpr (l, e0, Mul, e1, false)
+| [< '(l, Kwd "/="); e1 = parse_assign_expr >] -> AssignOpExpr (l, e0, Div, e1, false)
+| [< '(l, Kwd "&="); e1 = parse_assign_expr >] -> AssignOpExpr (l, e0, And, e1, false)
+| [< '(l, Kwd "|="); e1 = parse_assign_expr >] -> AssignOpExpr (l, e0, Or, e1, false)
+| [< '(l, Kwd "^="); e1 = parse_assign_expr >] -> AssignOpExpr (l, e0, Xor, e1, false)
+| [< '(l, Kwd "%="); e1 = parse_assign_expr >] -> AssignOpExpr (l, e0, Mod, e1, false)
+| [< '(l, Kwd "<<="); e1 = parse_assign_expr >] -> AssignOpExpr (l, e0, ShiftLeft, e1, false)
+| [< '(l, Kwd ">>="); e1 = parse_assign_expr >] -> AssignOpExpr (l, e0, ShiftRight, e1, false)
+(*| [< '(l, Kwd ">>>="); e1 = parse_assign_expr >] -> AssignOpExpr (l, e0, ???, e1, false)*)
 | [< >] -> e0
 and
   parse_arglist = parser

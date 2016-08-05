@@ -52,8 +52,8 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | AddressOf (l, e) -> expr_assigned_variables e
     | AssignExpr (l, (Var (_, x) | WVar (_, x, _)), e) -> [x] @ expr_assigned_variables e
     | AssignExpr (l, e1, e2) -> expr_assigned_variables e1 @ expr_assigned_variables e2
-    | AssignOpExpr (l, (Var (_, x) | WVar (_, x, _)), op, e, _, _, _) -> [x] @ expr_assigned_variables e
-    | AssignOpExpr (l, e1, op, e2, _, _, _) -> expr_assigned_variables e1 @ expr_assigned_variables e2
+    | AssignOpExpr (l, (Var (_, x) | WVar (_, x, _)), op, e, _) -> [x] @ expr_assigned_variables e
+    | AssignOpExpr (l, e1, op, e2, _) -> expr_assigned_variables e1 @ expr_assigned_variables e2
     | InstanceOfExpr(_, e, _) -> expr_assigned_variables e
     | SliceExpr (l, p1, p2) -> flatmap (function Some (LitPat e) -> expr_assigned_variables e | _ -> []) [p1; p2]
     | SuperMethodCall(_, _, args) -> flatmap expr_assigned_variables args
@@ -183,7 +183,9 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     check_breakpoint [] env l;
     SymExecSuccess
   
-  let check_func_header_compat l msg env00 (k, tparams, rt, xmap, nonghost_callers_only, pre, post, epost, terminates) (k0, tparams0, rt0, xmap0, nonghost_callers_only0, tpenv0, cenv0, pre0, post0, epost0, terminates0) =
+  let check_func_header_compat l msg0 msg env00 (k, tparams, rt, xmap, nonghost_callers_only, pre, post, epost, terminates) (k0, tparams0, rt0, xmap0, nonghost_callers_only0, tpenv0, cenv0, pre0, post0, epost0, terminates0) =
+    let msg1 = msg in
+    let msg = msg ^ ": " in
     if k <> k0 then 
       if (not (is_lemma k)) || (not (is_lemma k0)) then
         static_error l (msg ^ "Not the same kind of function.") None;
@@ -209,6 +211,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     end;
     if nonghost_callers_only <> nonghost_callers_only0 then static_error l (msg ^ "nonghost_callers_only clauses do not match.") None;
     execute_branch begin fun () ->
+    with_context (Executing ([], [], l, msg0 ^ ": " ^ msg1)) $. fun () ->
     let env0_0 = List.map (function (p, t) -> (p, get_unique_var_symb p t)) xmap0 in
     let currentThreadEnv = [(current_thread_name, get_unique_var_symb current_thread_name current_thread_type)] in
     let env0 = currentThreadEnv @ env0_0 @ cenv0 in
@@ -354,7 +357,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             let cenv0 = [("this", fterm)] @ ftargenv in
             let k' = match gh with Real -> Regular | Ghost -> Lemma(true, None) in
             let xmap0 = List.map (fun (x, t) -> (x, instantiate_type fttpenv t)) xmap0 in
-            check_func_header_compat l "Function type implementation check: " env0
+            check_func_header_compat l ("Function '" ^ fn ^ "'") "Function type implementation check" env0
               (k, tparams, rt, xmap, nonghost_callers_only, pre, post, [], terminates)
               (k', [], rt0, xmap0, false, fttpenv, cenv0, pre0, post0, [], terminates0);
             if gh = Real then
@@ -393,7 +396,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
               static_error l "Duplicate function implementation." None
           | Some (FuncInfo ([], fterm0, l0, k0, tparams0, rt0, xmap0, nonghost_callers_only0, pre0, pre_tenv0, post0, terminates0, functype_opt0, None,Static,Public)) ->
             if body = None then static_error l "Duplicate function prototype." None;
-            check_func_header_compat l "Function prototype implementation check: " [] (k, tparams, rt, xmap, nonghost_callers_only, pre, post, [], terminates) (k0, tparams0, rt0, xmap0, nonghost_callers_only0, [], [], pre0, post0, [], terminates0);
+            check_func_header_compat l ("Function '" ^ fn ^ "'") "Function prototype implementation check" [] (k, tparams, rt, xmap, nonghost_callers_only, pre, post, [], terminates) (k0, tparams0, rt0, xmap0, nonghost_callers_only0, [], [], pre0, post0, [], terminates0);
             iter pn ilist ((fn, FuncInfo ([], fterm, l, k, tparams, rt, xmap, nonghost_callers_only, pre, pre_tenv, post, terminates, functype_opt, body',Static,Public))::funcmap) ((fn, l0)::prototypes_implemented) ds
         end
       | _::ds -> iter pn ilist funcmap prototypes_implemented ds
@@ -484,7 +487,8 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             match try_assoc sign meths1 with
               None-> static_error l1 (".java file does not correctly implement .javaspec file: interface does not declare method " ^ string_of_sign sign) None
             | Some(lm1,gh1,rt1,xmap1,pre1,pre_tenv1,post1,epost1,v1,abstract1) ->
-              check_func_header_compat lm1 "Method specification check: " [] (func_kind_of_ghostness gh1,[],rt1, xmap1,false, pre1, post1, epost1, false) (func_kind_of_ghostness gh0, [], rt0, xmap0, false, [], [], pre0, post0, epost0, false);
+              let (mn, _) = sign in
+              check_func_header_compat lm1 ("Method '" ^ mn ^ "'") "Method specification check" [] (func_kind_of_ghostness gh1,[],rt1, xmap1,false, pre1, post1, epost1, false) (func_kind_of_ghostness gh0, [], rt0, xmap0, false, [], [], pre0, post0, epost0, false);
               match_meths meths0 (List.remove_assoc sign meths1)
         in
         match_fields fields0 fields1;
@@ -516,7 +520,8 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             let ("this", thisType)::xmap = xmap in
             let ("this", _)::xmap' = xmap' in
             let thisTerm = get_unique_var_symb "this" thisType in
-            check_func_header_compat l "Method specification check: " [("this", thisTerm)]
+            let (mn, _) = sign in
+            check_func_header_compat l ("Method '" ^ mn ^ "'") "Method specification check" [("this", thisTerm)]
               (Regular, [], rt, xmap, false, pre, post, epost, false)
               (Regular, [], rt', xmap', false, [], [("this", thisTerm)], pre', post', epost', false);
             pop();
@@ -638,7 +643,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                   let ("this", _)::xmap' = xmap' in
                   let thisTerm = get_unique_var_symb "this" thisType in
                   assume (ctxt#mk_eq (ctxt#mk_app get_class_symbol [thisTerm]) (List.assoc cn classterms)) (fun _ ->
-                    check_func_header_compat l "Method specification check: " [("this", thisTerm)]
+                    check_func_header_compat l ("Method '" ^ n ^ "'") "Method specification check" [("this", thisTerm)]
                       (Regular, [], rt, xmap, false, pre, post, epost, false)
                       (Regular, [], rt', xmap', false, [], [("this", thisTerm)], pre', post', epost', false);
                     success()
@@ -734,7 +739,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                   let value =
                     match ft with
                       Bool -> LitPat (False fl)
-                    | Int (Signed, 4) | Int (Signed, 2) | Int (Signed, 1) -> LitPat (IntLit (fl, zero_big_int, ref (Some ft)))
+                    | Int (Signed, 4) | Int (Signed, 2) | Int (Signed, 1) -> LitPat (IntLit (fl, zero_big_int))
                     | ObjType _ | ArrayType _ -> LitPat (Null fl)
                     | _ -> DummyPat
                   in
@@ -803,7 +808,8 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                   None-> iter rest (elem::meths1)
                 | Some(lm1,gh1,rt1,xmap1,pre1,pre_tenv1,post1,epost1,pre_dyn1,post_dyn1,epost_dyn1,ss1,fb1,v1,_,abstract1) -> 
                   let epost1: (type_ * asn) list = epost1 in
-                  check_func_header_compat lm1 "Method implementation check: " []
+                  let (mn, _) = sign0 in
+                  check_func_header_compat lm1 ("Method '" ^ mn ^ "'") "Method implementation check" []
                     (func_kind_of_ghostness gh1,[],rt1, xmap1,false, pre1, post1, epost1, false)
                     (func_kind_of_ghostness gh0, [], rt0, xmap0, false, [], [], pre0, post0, epost0, false);
                   if ss0=None then meths_impl:=(fst sign0,lm0)::!meths_impl;
@@ -822,7 +828,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                 | Some(lm1,xmap1,pre1,pre_tenv1,post1,epost1,ss1,v1) ->
                   let epost1: (type_ * asn) list = epost1 in
                   let rt= None in
-                  check_func_header_compat lm1 "Constructor implementation check: " []
+                  check_func_header_compat lm1 ("Class '" ^ cn ^ "'") "Constructor implementation check" []
                     (Regular,[],rt, ("this", ObjType cn)::xmap1,false, pre1, post1, epost1, false)
                     (Regular, [], rt, ("this", ObjType cn)::xmap0, false, [], [], pre0, post0, epost0, false);
                   if ss0=None then cons_impl:=(cn,lm0)::!cons_impl;
@@ -982,7 +988,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   
   let rec expr_mark_addr_taken e locals = 
     match e with
-      True _ | False _ | Null _ | Var _ | WVar _ | IntLit(_, _, _) | RealLit _ | StringLit(_, _) | ClassLit(_) -> ()
+      True _ | False _ | Null _ | Var _ | WVar _ | IntLit(_, _) | RealLit _ | StringLit(_, _) | ClassLit(_) -> ()
     | Operation(_, _, es) | WOperation (_, _, es, _) -> List.iter (fun e -> expr_mark_addr_taken e locals) es
     | AddressOf(_, (Var (_, x) | WVar (_, x, _))) -> mark_if_local locals x
     | Read(_, e, _) -> expr_mark_addr_taken e locals
@@ -1015,7 +1021,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | ProverTypeConversion(_, _, e) ->  expr_mark_addr_taken e locals
     | ArrayTypeExpr'(_, e) ->  expr_mark_addr_taken e locals
     | AssignExpr(_, e1, e2) ->  expr_mark_addr_taken e1 locals;  expr_mark_addr_taken e2 locals
-    | AssignOpExpr(_, e1, _, e2, _, _, _) -> expr_mark_addr_taken e1 locals;  expr_mark_addr_taken e2 locals
+    | AssignOpExpr(_, e1, _, e2, _) -> expr_mark_addr_taken e1 locals;  expr_mark_addr_taken e2 locals
     | InitializerList(_, es) -> List.iter (fun e -> expr_mark_addr_taken e locals) es
   and pat_expr_mark_addr_taken pat locals = 
     match pat with
@@ -1118,7 +1124,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       | _ -> []
     in
     match e with
-      True _ | False _ | Null _ | Var _ | WVar _ | IntLit(_, _, _) | RealLit _ | StringLit(_, _) | ClassLit(_) -> []
+      True _ | False _ | Null _ | Var _ | WVar _ | IntLit(_, _) | RealLit _ | StringLit(_, _) | ClassLit(_) -> []
     | Operation(_, _, es) | WOperation (_, _, es, _) -> List.flatten (List.map (fun e -> expr_address_taken e) es)
     | Read(_, e, _) -> expr_address_taken e
     | ArrayLengthExpr(_, e) -> expr_address_taken e
@@ -1151,7 +1157,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | ProverTypeConversion(_, _, e) -> expr_address_taken e
     | ArrayTypeExpr'(_, e) -> expr_address_taken e
     | AssignExpr(_, e1, e2) -> (expr_address_taken e1) @ (expr_address_taken e2)
-    | AssignOpExpr(_, e1, _, e2, _, _, _) -> (expr_address_taken e1) @ (expr_address_taken e2)
+    | AssignOpExpr(_, e1, _, e2, _) -> (expr_address_taken e1) @ (expr_address_taken e2)
     | InitializerList (_, es) -> flatmap expr_address_taken es
   
   let rec stmt_address_taken s =
@@ -1417,6 +1423,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   type leminfo =
     RealFuncInfo of
       string list  (* Preceding functions *)
+      * string list  (* Preceding lemmas *)
       * string  (* Current function *)
       * bool  (* Current function has 'terminates' clause *)
   | LemInfo of
@@ -1427,12 +1434,12 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   
   let leminfo_is_lemma leminfo =
     match leminfo with
-      RealFuncInfo (_, _, _) -> false
+      RealFuncInfo (_, _, _, _) -> false
     | LemInfo (_, _, _, _) -> true
   
   let should_terminate leminfo =
     match leminfo with
-      RealFuncInfo (gs, g, terminates) -> terminates
+      RealFuncInfo (gs, preceding_lemmas, g, terminates) -> terminates
     | LemInfo (lems, g, indinfo, nonghost_callers_only) -> true
   
   let verify_call funcmap eval_h l (pn, ilist) xo g targs pats (callee_tparams, tr, ps, funenv, pre, post, epost, terminates, v) pure leminfo sizemap h tparams tenv ghostenv env cont econt =
@@ -1506,7 +1513,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         in
         let _ =
           match leminfo with
-            RealFuncInfo (gs, g0, caller_terminates) ->
+            RealFuncInfo (gs, _, g0, caller_terminates) ->
             if caller_terminates && not pure then begin
               if not terminates then static_error l "Callee should be declared as 'terminates'." None;
               begin match g with
@@ -1636,9 +1643,8 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       * type_ (* pointee type *)
   end
   
-  (* This function checks whether e is a safe expression. An expression is safe if evaluation can never fail. 
-     For example, '1 == 0' is safe, but 'x / y' is not as evaluation fails when y is zero. 
-     Safe expressions never depend on the heap. *)
+  (* This function checks whether e is a safe expression.
+     An expression is safe if it does not read or write the heap, i.e., it does not require any chunks. *)
   let rec is_safe_expr e =
     match e with 
       IntLit _ -> true
@@ -1649,6 +1655,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | IfExpr(_, e1, e2, e3) -> List.for_all is_safe_expr [e1; e2; e3]
     | SizeofExpr(_, _) -> true
     | AddressOf(_, e) -> is_safe_expr e
+    | CastExpr (_, _, _, e) -> is_safe_expr e
     | _ -> false
   
   let rec verify_expr readonly (pn,ilist) tparams pure leminfo funcmap sizemap tenv ghostenv h env xo e cont econt =
@@ -1966,7 +1973,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       if not pure && is_lemma k then static_error l "Cannot call lemma functions in a non-pure context." None;
       if nonghost_callers_only then begin
         match leminfo with
-          RealFuncInfo (_, _, _) | LemInfo (_, _, _, true) -> ()
+          RealFuncInfo (_, _, _, _) | LemInfo (_, _, _, true) -> ()
         | _ -> static_error l "A lemma function marked nonghost_callers_only cannot be called from a non-nonghost_callers_only lemma function." None
       end;
       check_correct xo (Some g) targs es (lg, tparams, tr, ps, funenv, pre, post, None, terminates, v) cont
@@ -2069,7 +2076,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       branch
         (fun () -> assume v (fun () -> eval_h_core readonly h env e1 cont))
         (fun () -> assume (ctxt#mk_not v) (fun () -> eval_h_core readonly h env e2 cont))
-    | AssignOpExpr(l, lhs, op, rhs, postOp, ts, lhs_type) when !ts = Some [ObjType "java.lang.String"; ObjType "java.lang.String"] ->
+    | WAssignOpExpr(l, lhs, op, rhs, postOp, [ObjType "java.lang.String"; ObjType "java.lang.String"], lhs_type) ->
       eval_h h env lhs $. fun h env v1 ->
       let get_values = (fun h env v1 cont ->
         eval_h h env rhs $. fun h env v2 ->
@@ -2080,8 +2087,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       )
       in
       execute_assign_op_expr h env lhs get_values cont
-    | AssignOpExpr(l, lhs, ((And | Or | Xor) as op), rhs, postOp, ts, lhs_type) ->
-      assert(match !lhs_type with None -> false | _ -> true);
+    | WAssignOpExpr(l, lhs, ((And | Or | Xor) as op), rhs, postOp, ts, lhs_type) ->
       let get_values = (fun h env v1 cont -> eval_h h env rhs (fun h env v2 ->
           let new_value = 
             match op with
@@ -2094,8 +2100,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       ))
       in
       execute_assign_op_expr h env lhs get_values cont
-    | AssignOpExpr(l, lhs, ((Add | Sub | Mul | ShiftLeft | ShiftRight | Div | Mod | BitAnd | BitOr | BitXor) as op), rhs, postOp, ts, lhs_type) ->
-        let Some lhs_type = ! lhs_type in
+    | WAssignOpExpr(l, lhs, ((Add | Sub | Mul | ShiftLeft | ShiftRight | Div | Mod | BitAnd | BitOr | BitXor) as op), rhs, postOp, ts, lhs_type) ->
         let get_values = (fun h env v1 cont -> eval_h h env rhs (fun h env v2 ->
           let check_overflow min t max =
             if not pure then check_overflow l min t max (fun l t -> assert_term t h env l);
@@ -2113,45 +2118,45 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             | _ -> (min_int_term, max_int_term)
           in
           let bounds = if pure then (* in ghost code, where integer types do not imply limits *) None else 
-            match !ts with
-              Some ([Int (Unsigned, 4); _] | [_; Int (Unsigned, 4)]) -> Some (int_zero_term, max_ptr_term)
-            | Some ([Int (Signed, 4); _] | [_; Int (Signed, 4)]) -> Some (min_int_term, max_int_term)
-            | Some ([Int (Signed, 2); _] | [_; Int (Signed, 2)]) -> Some (min_short_term, max_short_term)
-            | Some ([Int (Unsigned, 2); _] | [_; Int (Unsigned, 2)]) -> Some (min_ushort_term, max_ushort_term)
-            | Some ([Int (Signed, 1); _] | [_; Int (Signed, 1)]) -> Some (min_char_term, max_char_term)
-            | Some ([Int (Unsigned, 1); _] | [_; Int (Unsigned, 1)]) -> Some (min_uchar_term, max_uchar_term)
+            match ts with
+              [Int (Unsigned, 4); _] | [_; Int (Unsigned, 4)] -> Some (int_zero_term, max_ptr_term)
+            | [Int (Signed, 4); _] | [_; Int (Signed, 4)] -> Some (min_int_term, max_int_term)
+            | [Int (Signed, 2); _] | [_; Int (Signed, 2)] -> Some (min_short_term, max_short_term)
+            | [Int (Unsigned, 2); _] | [_; Int (Unsigned, 2)] -> Some (min_ushort_term, max_ushort_term)
+            | [Int (Signed, 1); _] | [_; Int (Signed, 1)] -> Some (min_char_term, max_char_term)
+            | [Int (Unsigned, 1); _] | [_; Int (Unsigned, 1)] -> Some (min_uchar_term, max_uchar_term)
             | _ -> None
           in
           let new_value = 
           begin match op with
             Add ->
-            begin match !ts with
-              (Some [Int (Signed, 4); Int (Signed, 4)]) | (Some [Int (Signed, 2); Int (Signed, 2)]) | (Some [Int (Signed, 1); Int (Signed, 1)]) | (Some [Int (Unsigned, 4); Int (Unsigned, 4)]) ->
+            begin match ts with
+              [Int (Signed, 4); Int (Signed, 4)] | [Int (Signed, 2); Int (Signed, 2)] | [Int (Signed, 1); Int (Signed, 1)] | [Int (Unsigned, 4); Int (Unsigned, 4)] ->
               check_overflow min_term (ctxt#mk_add v1 v2) max_term
-            | Some [PtrType t; Int (Signed, 4)] ->
+            | [PtrType t; Int (Signed, 4)] ->
               let n = sizeof l t in
               check_overflow min_term (ctxt#mk_add v1 (ctxt#mk_mul n v2)) max_term
-            | Some [RealType; RealType] ->
+            | [RealType; RealType] ->
               ctxt#mk_real_add v1 v2
             | _ -> static_error l "CompoundAssignment not supported for the given types." None
             end
           | Sub ->
-            begin match !ts with
-              (Some [Int (Signed, 4); Int (Signed, 4)]) | (Some [Int (Signed, 2); Int (Signed, 2)]) | (Some [Int (Signed, 1); Int (Signed, 1)]) | 
-              (Some [Int (Unsigned, 4); Int (Unsigned, 4)]) | (Some [Int (Unsigned, 1); Int (Unsigned, 1)]) | (Some [Int (Unsigned, 2); Int (Unsigned, 2)])->
+            begin match ts with
+              [Int (Signed, 4); Int (Signed, 4)] | [Int (Signed, 2); Int (Signed, 2)] | [Int (Signed, 1); Int (Signed, 1)] | 
+              [Int (Unsigned, 4); Int (Unsigned, 4)] | [Int (Unsigned, 1); Int (Unsigned, 1)] | [Int (Unsigned, 2); Int (Unsigned, 2)]->
               check_overflow min_term (ctxt#mk_sub v1 v2) max_term
-            | Some [PtrType t; Int (Signed, 4)] ->
+            | [PtrType t; Int (Signed, 4)] ->
               let n = sizeof l t in
               check_overflow min_term (ctxt#mk_sub v1 (ctxt#mk_mul n v2)) max_term
-            | Some [RealType; RealType] ->
+            | [RealType; RealType] ->
               ctxt#mk_real_sub v1 v2
             | _ -> static_error l "CompoundAssignment not supported for the given types." None
             end
           | Mul ->
-            begin match !ts with
-              (Some [Int (Signed, 4); Int (Signed, 4)]) | (Some [Int (Signed, 2); Int (Signed, 2)]) | (Some [Int (Signed, 1); Int (Signed, 1)]) ->
+            begin match ts with
+              [Int (Signed, 4); Int (Signed, 4)] | [Int (Signed, 2); Int (Signed, 2)] | [Int (Signed, 1); Int (Signed, 1)] ->
               check_overflow min_term (ctxt#mk_mul v1 v2) max_term
-            | Some [RealType; RealType] ->
+            | [RealType; RealType] ->
               ctxt#mk_real_mul v1 v2
             | _ -> static_error l "CompoundAssignment not supported for the given types." None
             end
@@ -2179,7 +2184,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
               Int (Signed, 4) -> app
             | _ -> check_overflow min_term app max_term
             end 
-          | ShiftLeft when !ts = Some [Int (Signed, 4); Int (Signed, 4)] ->
+          | ShiftLeft when ts = [Int (Signed, 4); Int (Signed, 4)] ->
             let app = ctxt#mk_app shiftleft_int32_symbol [v1;v2] in
             begin match bounds with
               None -> ()

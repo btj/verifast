@@ -1463,7 +1463,7 @@ let print_context_stack_test cs =
               | Some e ->
                 let rec eval e =
                   match e with
-                    IntLit (_, n, _) -> n
+                    IntLit (_, n) -> n
                   | Var (l, x) ->
                     begin match try_assoc2 x enummap1 enummap0 with
                       None -> static_error l "No such enumeration constant" None
@@ -3200,16 +3200,10 @@ let rec close_tail heap_leak l env =
     | (ArrayType et, ArrayType et0) when et = et0 -> ()
     | (ArrayType (ObjType objtype), ArrayType (ObjType objtype0)) -> expect_type_core l msg None (ObjType objtype) (ObjType objtype0)
     | (StaticArrayType _, PtrType _) -> ()
-    | (Int (Unsigned, 1), Int (Signed, 4)) -> ()
-    | (Int (Unsigned, 1), Int (Signed, 2)) -> ()
-    | (Int (Unsigned, 1), Int (Unsigned, 2)) -> ()
-    | (Int (Unsigned, 1), Int (Unsigned, 4)) -> ()
-    | (Int (Signed, 1), Int (Signed, 4)) -> ()
-    | (Int (Signed, 1), Int (Signed, 2)) -> ()
-    | (Int (Unsigned, 2), Int (Signed, 4)) -> ()
-    | (Int (Unsigned, 2), Int (Unsigned, 4)) -> ()
-    | (Int (Signed, 2), Int (Signed, 4)) -> ()
-    | ((Int (Signed, 1)|Int (Unsigned, 1)|Int (Signed, 2)|Int (Unsigned, 2)|Int (Signed, 4)|Int (Unsigned, 4)), (Int (Signed, 1)|Int (Unsigned, 1)|Int (Signed, 2)|Int (Unsigned, 2)|Int (Signed, 4)|Int (Unsigned, 4))) when inAnnotation = Some true -> ()
+    | (Int (Signed, m), Int (Signed, n)) when m <= n -> ()
+    | (Int (Unsigned, m), Int (Unsigned, n)) when m <= n -> ()
+    | (Int (Unsigned, m), Int (Signed, n)) when m < n -> ()
+    | (Int (_, _), Int (_, _)) when inAnnotation = Some true -> ()
     | (ObjType x, ObjType y) when is_subtype_of x y -> ()
     | (PredType ([], ts, inputParamCount, inductiveness), PredType ([], ts0, inputParamCount0, inductiveness0)) ->
       begin
@@ -4441,7 +4435,11 @@ let rec close_tail heap_leak l env =
       let w1 = checkt e1 intType in
       let w2 = checkt e2 intType in
       (WOperation (l, op, [w1; w2], [Int (Signed, 4); Int (Signed, 4)]), Int (Signed, 4), None)
-    | IntLit (l, n, t) -> (e, (match !t with None -> t := Some intt; intt | Some t -> t), Some n)
+    | IntLit (l, n) ->
+      if inAnnotation = Some true || le_big_int min_int_big_int n && le_big_int n max_int_big_int then
+        (e, intt, Some n)
+      else
+        static_error l "int literal out of range" None
     | RealLit(l, n) ->
       if inAnnotation = Some true then
         (e, RealType, None)
@@ -4743,9 +4741,9 @@ let rec close_tail heap_leak l env =
       let (w1, t1, _) = check e1 in
       let w2 = checkt e2 t1 in
       (AssignExpr (l, w1, w2), t1, None)
-    | AssignOpExpr(l, e1, (Add | Sub | Mul as operator), e2, postOp, ts, lhs_type) ->
+    | AssignOpExpr(l, e1, (Add | Sub | Mul as operator), e2, postOp) ->
       let (w1, t1, value1) = check e1 in
-      lhs_type := Some t1;
+      let lhs_type = t1 in
       let (w2, t2, value2) = check e2 in
       begin
         match t1 with
@@ -4754,41 +4752,37 @@ let rec close_tail heap_leak l env =
             PtrType pt2 when operator = Sub ->
             if pt1 <> pt2 then static_error l "Pointers must be of same type" None;
             if pt1 <> Int (Signed, 1) && pt1 <> Void then static_error l "Subtracting non-char pointers is not yet supported" None;
-            ts:=Some [t1; t2];
-            (AssignOpExpr(l, w1, operator, w2, postOp, ts, lhs_type), intType, None)
+            (WAssignOpExpr(l, w1, operator, w2, postOp, [t1; t2], lhs_type), intType, None)
           | _ ->
             let w2 = checkt e2 intt in
-            ts:=Some [t1; intType];
-            (AssignOpExpr(l, w1, operator, w2, postOp, ts, lhs_type), t1, None)
+            (WAssignOpExpr(l, w1, operator, w2, postOp, [t1; intType], lhs_type), t1, None)
           end
         | Int (Signed, 4) | RealType | Int (Signed, 2) | Int (Signed, 1) ->
           let (w1, w2, t) = promote_checkdone l e1 e2 (w1, t1, value1) (w2, t2, value2) in
-          ts := Some [t; t];
-          (AssignOpExpr(l, w1, operator, w2, postOp, ts, lhs_type), t1, None)
+          (WAssignOpExpr(l, w1, operator, w2, postOp, [t; t], lhs_type), t1, None)
         | ObjType "java.lang.String" as t when operator = Add ->
           let w2 = checkt e2 t in
-          ts:=Some [t1; ObjType "java.lang.String"];
-          (AssignOpExpr(l, w1, operator, w2, postOp, ts, lhs_type), t1, None)
+          (WAssignOpExpr(l, w1, operator, w2, postOp, [t1; ObjType "java.lang.String"], lhs_type), t1, None)
         | _ -> static_error l ("Operand of addition, subtraction or multiplication must be pointer, integer, char, short, or real number: t1 "^(string_of_type t1)^" t2 "^(string_of_type t2)) None
       end
-    | AssignOpExpr(l, e1, (And | Or | Xor as operator), e2, postOp, ts, lhs_type) ->
+    | AssignOpExpr(l, e1, (And | Or | Xor as operator), e2, postOp) ->
       let (w1, t1, _) = check e1 in
       let (w2, t2, _) = check e2 in
-      lhs_type := Some t1;
-      ts := Some [t1; t2];
+      let lhs_type = t1 in
+      let ts = [t1; t2] in
       begin match (t1, t2) with
-        ((Bool, Bool)) -> (AssignOpExpr(l, w1, operator, w2, postOp, ts, lhs_type), t1, None)
+        (Bool, Bool) -> (WAssignOpExpr(l, w1, operator, w2, postOp, ts, lhs_type), t1, None)
       | ((Int (Signed, 1)|Int (Signed, 2)|Int (Signed, 4)), (Int (Signed, 1)|Int (Signed, 2)|Int (Signed, 4))) ->
-        (AssignOpExpr(l, w1, (match operator with And -> BitAnd | Or -> BitOr | Xor -> BitXor), w2, postOp, ts, lhs_type), Int (Signed, 4), None)
+        (WAssignOpExpr(l, w1, (match operator with And -> BitAnd | Or -> BitOr | Xor -> BitXor), w2, postOp, ts, lhs_type), Int (Signed, 4), None)
        | _ -> static_error l "Arguments to |=, &= and ^= must be boolean or integral types." None
       end
-    | AssignOpExpr(l, e1, (ShiftLeft | ShiftRight | Div | Mod as operator), e2, postOp, ts, lhs_type) ->
+    | AssignOpExpr(l, e1, (ShiftLeft | ShiftRight | Div | Mod as operator), e2, postOp) ->
       let (w1, t1, _) = check e1 in
       if t1 <> intType then static_error (expr_loc e1) "Variable of type int expected" None;
       let w2 = checkt e2 intType in
-      lhs_type := Some intType;
-      ts := Some [intType; intType];
-      (AssignOpExpr(l, w1, operator, w2, postOp, ts, lhs_type), intType, None)
+      let lhs_type = intType in
+      let ts = [intType; intType] in
+      (WAssignOpExpr(l, w1, operator, w2, postOp, ts, lhs_type), intType, None)
     | InitializerList (l, es) ->
       let rec to_list_expr es =
         match es with
@@ -4801,57 +4795,52 @@ let rec close_tail heap_leak l env =
     check_expr_t_core_core functypemap funcmap classmap interfmap (pn, ilist) tparams tenv inAnnotation e t0 false
   and check_expr_t_core_core functypemap funcmap classmap interfmap (pn,ilist) tparams tenv (inAnnotation: bool option) e t0 isCast =
     match (e, unfold_inferred_type t0) with
-      (Operation(l, Div, [IntLit(_, i1, _); IntLit(_, i2, _)]), RealType) -> RealLit(l, (num_of_big_int i1) // (num_of_big_int i2))
-    | (IntLit (l, n, t), PtrType _) when isCast || eq_big_int n zero_big_int -> t:=Some t0; e
-    | (IntLit (l, n, t), RealType) -> t:=Some RealType; e
-    | (IntLit (l, n, t), Int (Unsigned, 1)) ->
-      t:=Some (Int (Unsigned, 1));
+      (Operation(l, Div, [IntLit(_, i1); IntLit(_, i2)]), RealType) -> RealLit(l, (num_of_big_int i1) // (num_of_big_int i2))
+    | (IntLit (l, n), PtrType _) when isCast || eq_big_int n zero_big_int -> e
+    | (IntLit (l, n), RealType) -> RealLit (l, num_of_big_int n)
+    | (IntLit (l, n), Int (Unsigned, 1)) ->
       if not (le_big_int min_uchar_big_int n && le_big_int n max_uchar_big_int) then
         if isCast then
           let n = int_of_big_int (mod_big_int n (big_int_of_int 256)) in
-          IntLit (l, big_int_of_int n, t)
+          IntLit (l, big_int_of_int n)
         else
           static_error l "Integer literal used as uchar must be between 0 and 255." None
       else
         e
-    | (IntLit (l, n, t), Int (Signed, 1)) ->
-      t:=Some (Int (Signed, 1));
+    | (IntLit (l, n), Int (Signed, 1)) ->
       if not (le_big_int min_char_big_int n && le_big_int n max_char_big_int) then
         if isCast then
           let n = int_of_big_int (mod_big_int n (big_int_of_int 256)) in
           let n = if 128 <= n then n - 256 else n in
-          IntLit (l, big_int_of_int n, t)
+          IntLit (l, big_int_of_int n)
         else
           static_error l "Integer literal used as char must be between -128 and 127." None
       else
         e
-    | (IntLit (l, n, t), Int (Unsigned, 2)) ->
-      t:=Some (Int (Unsigned, 2));
+    | (IntLit (l, n), Int (Unsigned, 2)) ->
       if not (le_big_int min_ushort_big_int n && le_big_int n max_ushort_big_int) then
         if isCast then
           let n = int_of_big_int (mod_big_int n (big_int_of_int 65536)) in
-          IntLit (l, big_int_of_int n, t)
+          IntLit (l, big_int_of_int n)
         else
           static_error l "Integer literal used as ushort must be between 0 and 65535." None
       else
         e
-    | (IntLit (l, n, t), Int (Signed, 2)) ->
-      t:=Some (Int (Signed, 2));
+    | (IntLit (l, n), Int (Signed, 2)) ->
       if not (le_big_int min_short_big_int n && le_big_int n max_short_big_int) then
         if isCast then
           let n = int_of_big_int (mod_big_int n (big_int_of_int 65536)) in
           let n = if 32768 <= n then n - 65536 else n in
-          IntLit (l, big_int_of_int n, t)
+          IntLit (l, big_int_of_int n)
         else
           static_error l "Integer literal used as short must be between -32768 and 32767." None
       else
         e
-    | (IntLit (l, n, t), Int (Unsigned, 4)) ->
-      t:=Some (Int (Unsigned, 4));
+    | (IntLit (l, n), Int (Unsigned, 4)) ->
       if not (le_big_int min_ptr_big_int n && le_big_int n max_ptr_big_int) then
         if isCast then
           let n = int_of_big_int (mod_big_int n (big_int_of_string "4294967296")) in
-          IntLit (l, big_int_of_int n, t)
+          IntLit (l, big_int_of_int n)
         else
           static_error l "Integer literal used as ushort must be between 0 and 65535." None
       else
@@ -4890,7 +4879,7 @@ let rec close_tail heap_leak l env =
     match t with
       Bool -> w
     | Int (Signed, 1) | Int (Unsigned, 1) | Int (Signed, 2) | Int (Unsigned, 2) | Int (Signed, 4) | Int (Unsigned, 4) | PtrType _ when language = CLang ->
-      WOperation (expr_loc e, Neq, [w; IntLit(expr_loc e, big_int_of_int 0, ref (Some t))], [t; t])
+      WOperation (expr_loc e, Neq, [w; IntLit(expr_loc e, big_int_of_int 0)], [t; t])
     | _ -> expect_type (expr_loc e) inAnnotation t Bool; w
   and check_deref_core functypemap funcmap classmap interfmap (pn,ilist) l tparams tenv e f =
     let (w, t, _) = check_expr_core functypemap funcmap classmap interfmap (pn,ilist) tparams tenv None e in
@@ -5222,7 +5211,7 @@ let rec close_tail heap_leak l env =
           (IntConst n1, IntConst n2) -> IntConst (mult_big_int n1 n2)
         | _ -> raise NotAConstant
         end
-      | IntLit (l, n, _) -> IntConst n
+      | IntLit (l, n) -> IntConst n
       | StringLit (l, s) -> StringConst s
       | WRead (l, _, fparent, fname, _, fstatic, _, _) when fstatic -> eval_field callers (fparent, fname)
       | CastExpr (l, truncating, ManifestTypeExpr (_, t), e) ->
@@ -5499,7 +5488,7 @@ let rec close_tail heap_leak l env =
         let wfirst, wlength =
           match wstart, wend with
             None, Some wend -> warray, wend
-          | Some (LitPat (IntLit (_, n, _))), Some wend when eq_big_int n zero_big_int -> warray, wend
+          | Some (LitPat (IntLit (_, n))), Some wend when eq_big_int n zero_big_int -> warray, wend
           | Some (LitPat wstart), Some (LitPat wend) ->
             WOperation (lslice, Add, [warray; wstart], [PtrType elemtype; intType]),
             LitPat (WOperation (lslice, Sub, [wend; wstart], [intType; intType]))
@@ -5515,7 +5504,7 @@ let rec close_tail heap_leak l env =
         let (wrhs, tenv) = check_pat (pn,ilist) tparams tenv (list_type elemtype) rhs in
         let p = new predref "java.lang.array_slice" in
         p#set_domain [ArrayType elemtype; intType; intType; list_type elemtype]; p#set_inputParamCount (Some 3);
-        let wstart = match wstart with None -> LitPat (IntLit (lslice, zero_big_int, ref (Some intType))) | Some wstart -> wstart in
+        let wstart = match wstart with None -> LitPat (IntLit (lslice, zero_big_int)) | Some wstart -> wstart in
         let wend = match wend with None -> LitPat (ArrayLengthExpr (lslice, warray)) | Some wend -> wend in
         let args = [LitPat warray; wstart; wend; wrhs] in
         (WPredAsn (l, p, true, [elemtype], [], args), tenv, [])
@@ -6723,7 +6712,7 @@ let check_if_list_is_defined () =
     | CastExpr (l, truncating, ManifestTypeExpr (_, t), e) ->
       begin
         match (e, t, truncating) with
-          (IntLit (_, n, _), PtrType _, _) ->
+          (IntLit (_, n), PtrType _, _) ->
           if ass_term <> None && not (le_big_int zero_big_int n &&
 le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out of range." None;
           cont state (ctxt#mk_intlit_of_string (string_of_big_int n))
@@ -6764,38 +6753,13 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
             else
         ctxt#mk_reallit_of_num n
       end
-    | IntLit (l, n, t) ->
-      begin match !t with
-        Some RealType ->
-        cont state
-          begin
-            if eq_big_int n unit_big_int then
-              real_unit
-            else
-              ctxt#mk_reallit_of_num (num_of_big_int n)
-          end
-      | Some t ->
-        if ass_term <> None then
-        begin
-          let (min, max) =
-            match t with 
-              Int (Signed, 4) -> (min_int_big_int, max_int_big_int)
-            | Int (Unsigned, 1) -> (min_uchar_big_int, max_uchar_big_int)
-            | Int (Signed, 1) -> (min_char_big_int, max_char_big_int)
-            | Int (Unsigned, 2) -> (min_ushort_big_int, max_ushort_big_int)
-            | Int (Signed, 2) -> (min_short_big_int, max_short_big_int)
-            | Int (Unsigned, 4) -> (zero_big_int, max_ptr_big_int)
-            | PtrType _ -> (zero_big_int, max_ptr_big_int)
-          in
-          if not (le_big_int min n && le_big_int n max) then static_error l "IntLit: Int literal is out of range." None
-        end;
-        cont state
-          begin
-            try
-              let n = int_of_big_int n in ctxt#mk_intlit n
-            with Failure "int_of_big_int" -> ctxt#mk_intlit_of_string (string_of_big_int n)
-          end
-      end
+    | IntLit (l, n) ->
+      let v =
+        try
+          ctxt#mk_intlit (int_of_big_int n)
+        with Failure "int_of_big_int" -> ctxt#mk_intlit_of_string (string_of_big_int n)
+      in
+      cont state v
     | ClassLit (l,s) -> cont state (List.assoc s classterms)
     | StringLit (l, s) ->
       if ass_term = None then static_error l "String literals are not allowed in ghost code." None;
@@ -6843,12 +6807,12 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
       begin match ts with
         [RealType; RealType] ->
         begin match (e1, e2) with
-          (RealLit (_, n), IntLit (_, d, _)) when eq_num n (num_of_big_int unit_big_int) && eq_big_int d two_big_int -> cont state real_half
-        | (IntLit (_, n, _), IntLit (_, d, _)) when eq_big_int n unit_big_int && eq_big_int d two_big_int -> cont state real_half
+          (RealLit (_, n), IntLit (_, d)) when eq_num n (num_of_big_int unit_big_int) && eq_big_int d two_big_int -> cont state real_half
+        | (IntLit (_, n), IntLit (_, d)) when eq_big_int n unit_big_int && eq_big_int d two_big_int -> cont state real_half
         | _ -> 
           let rec eval_reallit e =
               match e with
-              IntLit (l, n, t) -> num_of_big_int n
+              IntLit (l, n) -> num_of_big_int n
             | RealLit (l, n) -> n
             | _ -> static_error (expr_loc e) "The denominator of a division must be a literal." None
           in
@@ -6862,7 +6826,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
         end;
         cont state (ctxt#mk_div v1 v2)
       end
-    | WOperation (l, BitAnd, [e1; IntLit(_, i, _)], ts) when le_big_int zero_big_int i && ass_term <> None -> (* optimization *)
+    | WOperation (l, BitAnd, [e1; IntLit(_, i)], ts) when le_big_int zero_big_int i && ass_term <> None -> (* optimization *)
       ev state e1 $. fun state v1 ->
         let iterm = ctxt#mk_intlit (int_of_big_int i) in
         let app = ctxt#mk_app bitwise_and_symbol [v1;iterm] in

@@ -139,7 +139,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         if stmt_ghostness = Ghost then begin
           if nonghost_callers_only then static_error l "Function pointer chunks cannot be produced for nonghost_callers_only lemmas." None;
           match leminfo with
-            RealFuncInfo (_, _, _) -> ()
+            RealFuncInfo (_, _, _, _) -> ()
           | LemInfo (lems, g0, indinfo, nonghost_callers_only) ->
             if not (List.mem fn lems) then static_error l "Function pointer chunks can only be produced for preceding lemmas." None;
             if scope_opt = None then static_error l "produce_lemma_function_pointer_chunk statement must have a body." None
@@ -243,7 +243,17 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                 let return_cont h tenv env t = assert_false h [] l "You cannot return out of a produce_function_pointer_chunk statement" None in
                 let econt _ h env texcep excep = assert_false h [] l "You cannot throw an exception from a produce_function_pointer_chunk statement" None in
                 begin fun tcont ->
-                  verify_cont (pn,ilist) blocks_done lblenv tparams boxes pure leminfo funcmap predinstmap sizemap tenv ghostenv h env ss_before tcont return_cont econt
+                  let (preceding_lemmas, indinfo) = match leminfo with
+                      RealFuncInfo (_, preceding_lemmas, _, _) -> (preceding_lemmas, None)
+                    | LemInfo (preceding_lemmas, _, indinfo, _) -> (preceding_lemmas, indinfo)
+                  in
+                  let leminfo_branch =
+                    (* lemma function pointer chunk is never a nonghost_callers_only context. *)
+                    LemInfo(preceding_lemmas, "<anonymous lemma>", indinfo, false)
+                  in
+                  verify_cont (pn,ilist) blocks_done lblenv tparams boxes pure
+                    leminfo_branch funcmap predinstmap sizemap tenv ghostenv h
+                    env ss_before tcont return_cont econt
                 end $. fun sizemap tenv ghostenv h env ->
                 with_context (Executing (h, env, callLoc, "Verifying function call")) $. fun () ->
                 with_context PushSubcontext $. fun () ->
@@ -340,8 +350,8 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       begin
         match leminfo with
           | LemInfo (lems, g0, indinfo, nonghost_callers_only) ->
-              if not(nonghost_callers_only) then static_error l "This construct is not allowed in a lemma that is not nonghost_callers_only." None
-          | RealFuncInfo (_, _, _) -> ()
+              if not(nonghost_callers_only) then static_error l "This construct is not allowed in a context that is not nonghost_callers_only." None
+          | RealFuncInfo (_, _, _, _) -> ()
       end;
       let (lftn, ftn) =
         match e with
@@ -414,7 +424,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           let (w, _) = check_expr (pn,ilist) tparams tenv e in
           verify_expr false h env None w (fun h env _ -> cont h env) econt
       end
-    | ExprStmt (CallExpr (l, "set_verifast_verbosity", [], [], [LitPat (IntLit (_, n, _))], Static)) when pure ->
+    | ExprStmt (CallExpr (l, "set_verifast_verbosity", [], [], [LitPat (IntLit (_, n))], Static)) when pure ->
       let oldv = !verbosity in
       set_verbosity (int_of_big_int n);
       let r = cont h env in
@@ -456,7 +466,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       let (_, _, _, _, call_below_perm__symb, _, _) = List.assoc "call_below_perm_" predfammap in
       let g =
         match leminfo with
-          RealFuncInfo (gs, g, terminates) -> g
+          RealFuncInfo (gs, _, g, terminates) -> g
         | LemInfo (lems, g, indinfo, nonghost_callers_only) -> g
       in
       let gterm = List.assoc g funcnameterms in
@@ -1392,7 +1402,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           cont h
         in
         begin match leminfo with
-          RealFuncInfo (gs, g, terminates) when terminates -> consume_call_perm g
+          RealFuncInfo (gs, _, g, terminates) when terminates -> consume_call_perm g
         | LemInfo (gs, g, indinfo, nonghost_callers_only) -> consume_call_perm g
         | _ -> cont h'''
         end
@@ -1930,7 +1940,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       in
       let leminfo =
         match leminfo with
-          RealFuncInfo (_, _, _) ->
+          RealFuncInfo (_, _, _, _) ->
           let lems0 =
             flatmap
               (function (fn, FuncInfo (funenv, fterm, l, Lemma(_), tparams, rt, ps, nonghost_callers_only, pre, pre_tenv, post, terminates, functype_opt, body, _, _)) -> [fn] | _ -> [])
@@ -2390,7 +2400,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       if is_lemma k then 
         (true, LemInfo (lems, g, indinfo, nonghost_callers_only), gs, g::lems, List.map (function (p, t) -> p) ps @ ["#result"])
       else
-        (false, RealFuncInfo (gs, g, terminates), g::gs, lems, [])
+        (false, RealFuncInfo (gs, lems, g, terminates), g::gs, lems, [])
     in
     let env = [(current_thread_name, get_unique_var_symb current_thread_name current_thread_type)] @ penv @ env in
     let _ =
@@ -2517,10 +2527,11 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         record_fun_timing lm (cn ^ ".<ctor>") begin fun () ->
         if !verbosity >= 1 then Printf.printf "%10.6fs: %s: Verifying constructor %s\n" (Perf.time()) (string_of_loc lm) (string_of_sign (cn, sign));
         execute_branch begin fun () ->
+        with_context (Executing ([], [], lm, Printf.sprintf "Class '%s': verifying constructor" cn)) $. fun () ->
         let env = get_unique_var_symbs_non_ghost ([(current_thread_name, current_thread_type)] @ xmap) in
         let (sizemap, indinfo) = switch_stmt ss env in
         let (ss, explicitsupercall) = match ss with SuperConstructorCall(l, es) :: body -> (body, Some(SuperConstructorCall(l, es))) | _ -> (ss, None) in
-        let (in_pure_context, leminfo, ghostenv) = (false, RealFuncInfo ([], "", false), []) in
+        let (in_pure_context, leminfo, ghostenv) = (false, RealFuncInfo ([], lems, "", false), []) in
         begin
           produce_asn [] [] ghostenv env pre real_unit None None $. fun h ghostenv env ->
           let this = get_unique_var_symb "this" (ObjType cn) in
@@ -2602,10 +2613,11 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         if !verbosity >= 1 then Printf.printf "%10.6fs: %s: Verifying method %s\n" (Perf.time()) (string_of_loc l) g;
         if abstract then static_error l "Abstract method cannot have implementation." None;
         execute_branch $. fun () ->
+        with_context (Executing ([], [], l, Printf.sprintf "Verifying method '%s'" g)) $. fun () ->
         let (in_pure_context, leminfo, ghostenv) =
           match gh with
             Ghost -> (true, LemInfo (lems, "<method>", None, false), List.map (function (p, t) -> p) ps @ ["#result"])
-          | Real -> (false, RealFuncInfo ([], "<method>", false), [])
+          | Real -> (false, RealFuncInfo ([], lems, "<method>", false), [])
         in
         begin
           let env = get_unique_var_symbs_non_ghost (ps @ [(current_thread_name, current_thread_type)]) in (* actual params invullen *)

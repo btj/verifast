@@ -1306,224 +1306,133 @@ let show_ide initialPath prover codeFont traceFont runtime layout javaFrontend e
         Some (path, insert_line + 1)
     end
   in
-  (*let genPredicate runToCursor targetPath ()  =
-    msg := Some("Verifying...");
-    updateMessageEntry(false);
-    clearTrace();
-    match !buffers with
-      [] -> ()
-    | tab::tabs ->
-      begin
-        match ensureHasPath tab with
-          None -> ()
-        | Some path ->
-          clearSyntaxHighlighting();
-          if not (List.exists sync_with_disk tabs) then
-          begin
-            let breakpoint = Some (path, -1)               
-            in
-            let postProcess = ref (fun () -> ()) in
-            begin try
-              let options = {
-                option_verbose = 0;
-                option_disable_overflow_check = !disableOverflowCheck;
-                option_use_java_frontend = !useJavaFrontend;
-                option_enforce_annotations = enforceAnnotations;
-                option_allow_should_fail = true;
-                option_emit_manifest = false;
-                option_vroots = [crt_vroot default_bindir];
-                option_allow_assume = true;
-                option_simplify_terms = !simplifyTerms;
-                option_runtime = runtime;
-                option_provides = [];
-                option_keep_provide_files = true;
-                option_include_paths = !include_paths;
-                option_safe_mode = false;
-                option_header_whitelist = [];
-              }
-              in
-              let reportExecutionForest =
-                if targetPath <> None then
-                  (fun _ -> ())
-                else
-                  (fun forest -> postProcess := (fun () -> reportExecutionForest !forest))
-              in
-              if options.option_use_java_frontend then begin
-                perform_syntax_highlighting tab tab#buffer#start_iter tab#buffer#end_iter
-              end;
-              let stats = verify_program prover options path reportRange reportUseSite reportExecutionForest breakpoint true false targetPath in
-              let success =
-                if targetPath <> None then
-                  (msg := Some("0 errors found (target path not reached)"); false)
-                else if runToCursor then
-                  (msg := Some("0 errors found (cursor is unreachable)"); false)
-                else
-                  (msg := Some("0 errors found (" ^ (string_of_int (stats#getStmtExec)) ^ " statements verified)"); true)
-              in
-              updateMessageEntry(success);
-              
-            with
-              PreprocessorDivergence (l, emsg) ->
-              handleStaticError l ("Preprocessing error" ^ (if emsg = "" then "." else ": " ^ emsg)) None
-            | ParseException (l, emsg) ->
-              let message = "Parse error" ^ (if emsg = "" then "." else ": " ^ emsg) in
-              if (l = Ast.dummy_loc) then begin
-                msg := Some(message);
-                updateMessageEntry(false)
-              end
-              else
-                handleStaticError l message None
-            | CompilationError(emsg) ->
-              clearTrace();
-              msg := Some(emsg);
-              updateMessageEntry(false)
-            | StaticError (l, emsg, eurl) ->
-              handleStaticError l emsg eurl 
-            | SymbolicExecutionError (ctxts, phi, l, emsg, eurl) ->
-              ctxts_lifo := Some ctxts;
-              updateStepItems();
-              ignore $. updateStepListView();
-              stepSelected();
-              (* let (ass, h, env, steploc, stepmsg, locstack) = get_step_of_path (get_last_step_path()) in *)
-              begin match ctxts with
-                Executing (_, _, steploc, _)::_ when l = steploc ->
-                apply_tag_by_loc "error" l;
-                msg := Some emsg;
-                url := eurl;
-                updateMessageEntry(false)
-              | _ ->
-                handleStaticError l emsg eurl
-              end
-            | e ->
-              prerr_endline ("VeriFast internal error: \n" ^ Printexc.to_string e ^ "\n");
-              Printexc_proxy.print_backtrace stderr;
-              flush stderr;
-              GToolbox.message_box "VeriFast IDE" "Verification failed due to an internal error. See the console window for details."
-            end;
+let verifyProgram runToCursor targetPath autofix genPredicate () =
+msg := Some("Verifying...");
+updateMessageEntry(false);
+clearTrace();
+match !buffers with
+  [] -> ()
+| tab::tabs ->
+  begin
+    match ensureHasPath tab with
+      None -> ()
+    | Some path ->
+      clearSyntaxHighlighting();
+      if not (List.exists sync_with_disk tabs) then
+      begin  
+        let breakpoint =
+          if genPredicate then
+             Some (path, -1)  
+          else if runToCursor then
+            getCursor ()
+          else
+            None
+        in
+        let postProcess = ref (fun () -> ()) in
+        begin try
+          let options = {
+            option_verbose = 0;
+            option_disable_overflow_check = !disableOverflowCheck;
+            option_use_java_frontend = !useJavaFrontend;
+            option_enforce_annotations = enforceAnnotations;
+            option_allow_should_fail = true;
+            option_emit_manifest = false;
+            option_vroots = [crt_vroot default_bindir];
+            option_allow_assume = true;
+            option_simplify_terms = !simplifyTerms;
+            option_runtime = runtime;
+            option_provides = [];
+            option_keep_provide_files = true;
+            option_include_paths = !include_paths;
+            option_safe_mode = false;
+            option_header_whitelist = [];
+          }
+          in
+          let reportExecutionForest =
+            if targetPath <> None then
+              (fun _ -> ())
+            else
+              (fun forest -> postProcess := (fun () -> reportExecutionForest !forest))
+          in
+          if options.option_use_java_frontend then begin
+            !buffers |> List.iter begin fun tab ->
+              perform_syntax_highlighting tab tab#buffer#start_iter tab#buffer#end_iter
+            end
+          end;
+          let stats = verify_program prover options path reportRange reportUseSite reportExecutionForest breakpoint genPredicate autofix targetPath in
+          (printnow "%s\n" "Trying to find the reason");
+          let success =
+            if targetPath <> None then
+              (msg := Some("0 errors found (target path not reached)"); false)
+            else if runToCursor then
+              (msg := Some("0 errors found (cursor is unreachable)"); false)
+            else
+              (msg := Some("0 errors found (" ^ (string_of_int (stats#getStmtExec)) ^ " statements verified)"); true)
+          in
+          updateMessageEntry(success)
+        with
+          PreprocessorDivergence (l, emsg) ->
+          handleStaticError l ("Preprocessing error" ^ (if emsg = "" then "." else ": " ^ emsg)) None
+        | ParseException (l, emsg) ->
+          let message = "Parse error" ^ (if emsg = "" then "." else ": " ^ emsg) in
+          if (l = Ast.dummy_loc) then begin
+            msg := Some(message);
+            updateMessageEntry(false)
+          end
+          else
+            handleStaticError l message None
+        | CompilationError(emsg) ->
+          clearTrace();
+          msg := Some(emsg);
+          updateMessageEntry(false)
+        | StaticError (l, emsg, eurl) -> 
+          handleStaticError l emsg eurl; if(autofix || genPredicate) then  
+            let () = 
+            match !(tab#path) with
+                None -> ()
+           |    Some (path, mtime) ->
+                    if not (close_all ()) then
+                        ignore (open_path path); updateStepItems();
+          ignore $. updateStepListView();
+          stepSelected() in ()   
+        | SymbolicExecutionError (ctxts, phi, l, emsg, eurl) ->
+          ctxts_lifo := Some ctxts;
+          if(autofix || genPredicate) then  
+            let () = 
+            match !(tab#path) with
+                None -> ()
+           |    Some (path, mtime) ->
+                    if not (close_all ()) then
+                        ignore (open_path path); updateStepItems();
+          ignore $. updateStepListView();
+          stepSelected() in () 
+         else
+          updateStepItems();
+          ignore $. updateStepListView();
+          stepSelected();
+          (* let (ass, h, env, steploc, stepmsg, locstack) = get_step_of_path (get_last_step_path()) in *)
+          begin match ctxts with
+            Executing (_, _, steploc, _)::_ when l = steploc ->
+            apply_tag_by_loc "error" l;
+            msg := Some emsg;
+            url := eurl;
+            updateMessageEntry(false);            
+          | _ -> 
+            handleStaticError l emsg eurl;
             
-            !postProcess ()
           end
-          
-      end;
-  let () = 
-    match !(tab#path) with
-            None -> ()
-    |       Some (path, mtime) ->
-                    if not (close_all ()) then
-                            ignore (open_path path) in ()
-  in*)
-  let verifyProgram runToCursor targetPath autofix genPredicate () =
-    msg := Some("Verifying...");
-    updateMessageEntry(false);
-    clearTrace();
-    match !buffers with
-      [] -> ()
-    | tab::tabs ->
-      begin
-        match ensureHasPath tab with
-          None -> ()
-        | Some path ->
-          clearSyntaxHighlighting();
-          if not (List.exists sync_with_disk tabs) then
-          begin  
-            let breakpoint =
-              if genPredicate then
-                 Some (path, -1)  
-              else if runToCursor then
-                getCursor ()
-              else
-                None
-            in
-            let postProcess = ref (fun () -> ()) in
-            begin try
-              let options = {
-                option_verbose = 0;
-                option_disable_overflow_check = !disableOverflowCheck;
-                option_use_java_frontend = !useJavaFrontend;
-                option_enforce_annotations = enforceAnnotations;
-                option_allow_should_fail = true;
-                option_emit_manifest = false;
-                option_vroots = [crt_vroot default_bindir];
-                option_allow_assume = true;
-                option_simplify_terms = !simplifyTerms;
-                option_runtime = runtime;
-                option_provides = [];
-                option_keep_provide_files = true;
-                option_include_paths = !include_paths;
-                option_safe_mode = false;
-                option_header_whitelist = [];
-              }
-              in
-              let reportExecutionForest =
-                if targetPath <> None then
-                  (fun _ -> ())
-                else
-                  (fun forest -> postProcess := (fun () -> reportExecutionForest !forest))
-              in
-              if options.option_use_java_frontend then begin
-                !buffers |> List.iter begin fun tab ->
-                  perform_syntax_highlighting tab tab#buffer#start_iter tab#buffer#end_iter
-                end
-              end;
-              let stats = verify_program prover options path reportRange reportUseSite reportExecutionForest breakpoint genPredicate autofix targetPath in
-              let success =
-                if targetPath <> None then
-                  (msg := Some("0 errors found (target path not reached)"); false)
-                else if runToCursor then
-                  (msg := Some("0 errors found (cursor is unreachable)"); false)
-                else
-                  (msg := Some("0 errors found (" ^ (string_of_int (stats#getStmtExec)) ^ " statements verified)"); true)
-              in
-              updateMessageEntry(success)
-            with
-              PreprocessorDivergence (l, emsg) ->
-              handleStaticError l ("Preprocessing error" ^ (if emsg = "" then "." else ": " ^ emsg)) None
-            | ParseException (l, emsg) ->
-              let message = "Parse error" ^ (if emsg = "" then "." else ": " ^ emsg) in
-              if (l = Ast.dummy_loc) then begin
-                msg := Some(message);
-                updateMessageEntry(false)
-              end
-              else
-                handleStaticError l message None
-            | CompilationError(emsg) ->
-              clearTrace();
-              msg := Some(emsg);
-              updateMessageEntry(false)
-            | StaticError (l, emsg, eurl) ->
-              handleStaticError l emsg eurl 
-            | SymbolicExecutionError (ctxts, phi, l, emsg, eurl) ->
-              ctxts_lifo := Some ctxts;
-              updateStepItems();
-              ignore $. updateStepListView();
-              stepSelected();
-              (* let (ass, h, env, steploc, stepmsg, locstack) = get_step_of_path (get_last_step_path()) in *)
-              begin match ctxts with
-                Executing (_, _, steploc, _)::_ when l = steploc ->
-                apply_tag_by_loc "error" l;
-                msg := Some emsg;
-                url := eurl;
-                updateMessageEntry(false)
-              | _ ->
-                handleStaticError l emsg eurl
-              end
-            | e ->
-              prerr_endline ("VeriFast internal error: \n" ^ Printexc.to_string e ^ "\n");
-              Printexc_proxy.print_backtrace stderr;
-              flush stderr;
-              GToolbox.message_box "VeriFast IDE" "Verification failed due to an internal error. See the console window for details."
-            end;
-            !postProcess ()
-          end
-      end;
+        | e -> (printnow "%s\n" "after with lets look here what is happining77777");
+          prerr_endline ("VeriFast internal error: \n" ^ Printexc.to_string e ^ "\n");
+          Printexc_proxy.print_backtrace stderr;
+          flush stderr;
+          GToolbox.message_box "VeriFast IDE" "Verification failed due to an internal error. See the console window for details."
+         
+         end;
+        !postProcess ()
+      end
+  end
      (*By Mahmoud: I added the folwoing let to make sure that the automatically generated modifications are updated in the GUI. I am not sure this is the best way, but I am reopening the file after each change. The problem of reloading is that after some reloads I get a segmentation errror and the GUI close by itself  *)
-    if(autofix || genPredicate) then
-    let () = 
-    match !(tab#path) with
-            None -> ()
-    |       Some (path, mtime) ->
-                    if not (close_all ()) then
-                            ignore (open_path path) in ()
+
   in
   let runShapeAnalyser () =
     (* TODO: after running the shape analyser, the undo history

@@ -1395,7 +1395,7 @@ match !buffers with
                         ignore (open_path path); updateStepItems();
           ignore $. updateStepListView();
           stepSelected() in ()   
-        | SymbolicExecutionError (ctxts, phi, l, emsg, eurl) ->
+        | SymbolicExecutionError (ctxts, phi, l, emsg, eurl) -> 
           ctxts_lifo := Some ctxts;
           if(autofix || genPredicate) then  
             let () = 
@@ -1421,7 +1421,7 @@ match !buffers with
             handleStaticError l emsg eurl;
             
           end
-        | e -> (printnow "%s\n" "after with lets look here what is happining77777");
+        | e ->
           prerr_endline ("VeriFast internal error: \n" ^ Printexc.to_string e ^ "\n");
           Printexc_proxy.print_backtrace stderr;
           flush stderr;

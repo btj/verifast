@@ -2718,18 +2718,23 @@ let print_context_stack_test cs =
                                                 end
                                         |   (Chunk ((g, literal), targs, coef, ts, size)) :: rest ->
                                             if((ctxt#pprint g) = predicatename) then
-                                            begin
-                                               (printnow "Just checking where I am: %s\n" predicatename);
+                                            begin   
                                                 match ts with
                                                     instname :: counter :: [] -> 
-                                                        if((msg = "Loop leaks heap chunks") || exist_local (ctxt#pprint counter) (return_env !contextStack) = false) then
-                                                            ((Printf.sprintf "%s%s%s" "?" (ctxt#pprint counter) "1") :: [])
+                                                        if((msg = "Loop leaks heap chunks")) then
+                                                            ((Printf.sprintf "%s%s%s" "?" (ctxt#pprint counter) "1") :: [])                                                           
+                                                        else if((exist_local (ctxt#pprint counter) (return_env !contextStack)) = false) then
+                                                          (*  ((ctxt#pprint counter) :: (iter parameters))*)
+                                                            ("0" :: (iter parameters))
                                                         else
                                                             ((ctxt#pprint counter) :: (iter parameters))
                                                     (*TO Do: make the following conditoin generic*)
                                                 |   instname :: counter1 :: counter2 :: [] ->
-                                                        if((msg = "Loop leaks heap chunks") || exist_local (ctxt#pprint counter1) (return_env !contextStack) = false) then
+                                                        if(msg = "Loop leaks heap chunks") then
                                                             ((Printf.sprintf "%s%s%s" "?" (ctxt#pprint counter1) "1") :: (Printf.sprintf "%s%s%s" "?" (ctxt#pprint counter2) "1") :: [])
+                                                        else if(exist_local (ctxt#pprint counter1) (return_env !contextStack) = false) then
+                                                            (*((ctxt#pprint counter1) :: (ctxt#pprint counter2) :: [])*)
+                                                                ("0" :: "0" :: [])
                                                         else
                                                             ((ctxt#pprint counter1) :: (ctxt#pprint counter2) :: [])
                                                         (*else
@@ -3181,7 +3186,7 @@ let find_missingheap predname targs parameters h env =
                     match loc1 with
                         ((s, r, col), (s1, r1, col1)) -> 
                                     let messg = open_predicate_precondition (extractpredicatename predname (print_predicates)) (print_predicates) x in
-                                        externalprint_pre (lines_from_files s) s messg (print_line ((*(determine_no*) (search_context_stack_pre !contextStack)))  
+                                        externalprint_pre (lines_from_files s) s messg (print_line ((search_context_stack_pre !contextStack)))  
                 else
                 begin
                     let l = loc1 and env = env1
@@ -3191,9 +3196,9 @@ let find_missingheap predname targs parameters h env =
                             ((s, r, col), (s1, r1, col1)) ->
                                 let predicatename = extractpredicatename predname (print_predicates)
                                 in
-                                if((try(Str.search_forward(Str.regexp (Printf.sprintf "%s%s" predicatename "_")) (return_line s (print_line ((*(determine_no*) (search_context_stack_pre !contextStack))) ) 0) with Not_found -> -1) > -1) then
-                                    let messg = Printf.sprintf "%s%s%s%s%s%s" predname "(" x ", ?" predname "1 )" in
-                                        externalprint_pre (lines_from_files s) s messg (print_line ((*(determine_no*) (search_context_stack_pre !contextStack)))  
+                                if((try(Str.search_forward(Str.regexp (Printf.sprintf "%s%s" predicatename "_")) (return_line s (print_line ((search_context_stack_pre !contextStack))) ) 0) with Not_found -> -1) > -1)                                 then
+                                    let messg = Printf.sprintf "%s%s%s%s%s%s" predname "(" x ", ?" predname "0 )" in
+                                        externalprint_pre (lines_from_files s) s messg (print_line ((search_context_stack_pre !contextStack)))  
                                 else   
                                   let message = (search_heap predicatename heap r parameters) in
                                     if(message = "") then
@@ -3208,17 +3213,17 @@ let find_missingheap predname targs parameters h env =
                                        in
                                        let message = Printf.sprintf "%s%s%s%s" predicatename "(" (String.concat "," (parameters_list0 parameters r true predicateparam)) ")" 
                                        in 
-                                            externalprint_pre (lines_from_files s) s message (print_line ((*(determine_no*) (search_context_stack_pre !contextStack))))
+                                            externalprint_pre (lines_from_files s) s message (print_line ((search_context_stack_pre !contextStack))))
                                     else
                                        externalprint_open_stmt (lines_from_files s) s message (r-1);
                                        if((try (Str.search_forward (Str.regexp "count[0-9]*") message 0) with Not_found -> -1) > -1) then
                                             let message1 = Str.matched_string message in
                                                 if((try (Str.search_forward (Str.regexp "[-][0-9]+") message 0) with Not_found -> -1) > -1) then
                                                     let message2 = Printf.sprintf "%s %s %s" message1 ">" (String.sub (Str.matched_string message) 1 ((String.length (Str.matched_string message)) - 1)) in
-                                                        externalprint_pre (lines_from_files s) s message2 (print_line ((*(determine_no*) (search_context_stack_pre !contextStack)))                          
+                                                        externalprint_pre (lines_from_files s) s message2 (print_line ((search_context_stack_pre !contextStack)))                          
                                                 else
                                                     let message2 = Printf.sprintf "%s %s" message1 "> 0" in
-                                                        externalprint_pre (lines_from_files s) s message2 (print_line ((*(determine_no*) (search_context_stack_pre !contextStack)))
+                                                        externalprint_pre (lines_from_files s) s message2 (print_line ((search_context_stack_pre !contextStack)))
              end
   end
     

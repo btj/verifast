@@ -5729,6 +5729,8 @@ let rec close_tail heap_leak l env =
   let _, pointer_pred_symb, _, pointers_pred_symb, _, malloc_block_pointers_pred_symb as pointer_pointee_tuple = pointee_tuple "pointer" "pointers"
   let _, int_pred_symb, _, ints_pred_symb, _, malloc_block_ints_pred_symb as int_pointee_tuple = pointee_tuple "integer" "ints"
   let _, uint_pred_symb, _, uints_pred_symb, _, malloc_block_uints_pred_symb as uint_pointee_tuple = pointee_tuple "u_integer" "uints"
+  let _, short_pred_symb, _, shorts_pred_symb, _, malloc_block_shorts_pred_symb as short_pointee_tuple = pointee_tuple "short_integer" "shorts"
+  let _, ushort_pred_symb, _, ushorts_pred_symb, _, malloc_block_ushorts_pred_symb as ushort_pointee_tuple = pointee_tuple "u_short_integer" "ushorts"
   let _, char_pred_symb, _, chars_pred_symb, _, malloc_block_chars_pred_symb as char_pointee_tuple = pointee_tuple "character" "chars"
   let _, uchar_pred_symb, _, uchars_pred_symb, _, malloc_block_uchars_pred_symb as uchar_pointee_tuple = pointee_tuple "u_character" "uchars"
   
@@ -5740,6 +5742,8 @@ let rec close_tail heap_leak l env =
       PtrType _ -> Some pointer_pointee_tuple
     | Int (Signed, 4) -> Some int_pointee_tuple
     | Int (Unsigned, 4) -> Some uint_pointee_tuple
+    | Int (Signed, 2) -> Some short_pointee_tuple
+    | Int (Unsigned, 2) -> Some ushort_pointee_tuple
     | Int (Signed, 1) -> Some char_pointee_tuple
     | Int (Unsigned, 1) -> Some uchar_pointee_tuple
     | _ -> None
@@ -6214,6 +6218,14 @@ let rec close_tail heap_leak l env =
                 | Int (Unsigned, 4) ->
                   let pref = new predref "u_integer" in
                   pref#set_domain [PtrType (Int (Unsigned, 4)); Int (Unsigned, 4)];
+                  [predinst pref]
+                | Int (Signed, 2) ->
+                  let pref = new predref "short_integer" in
+                  pref#set_domain [PtrType (Int (Signed, 2)); (Int (Signed, 2))];
+                  [predinst pref]
+                | Int (Unsigned, 2) ->
+                  let pref = new predref "u_short_integer" in
+                  pref#set_domain [PtrType (Int (Unsigned, 2)); Int (Unsigned, 2)];
                   [predinst pref]
                 | Int (Signed, 1) ->
                   let pref = new predref "character" in

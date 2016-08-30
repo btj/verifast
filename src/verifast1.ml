@@ -1884,8 +1884,10 @@ let print_context_stack_test cs =
              if List.mem_assoc f fmap then static_error lf "Duplicate field name." None;
              let t = check_pure_type ("", []) [] t in
              let offset = if gh = Ghost then None else Some (get_unique_var_symb (sn ^ "_" ^ f ^ "_offset") intType) in
-             let entry = (f, (lf, gh, t, offset)) in
+             let entry = (printnow "I am printing f %s\n" f); (f, (lf, gh, t, offset)) in
              iter (entry::fmap) fds (has_ghost_fields || gh = Ghost)
+           | Owns :: fds -> iter (("Owns",(l, Ghost, AnyType, None)) :: fmap) fds (true)
+           | Counts(counter) :: fds -> iter (("Counts",(l, Ghost, AnyType, None)) :: fmap) fds (true)
          in
          begin
            match fds_opt with
@@ -1896,6 +1898,22 @@ let print_context_stack_test cs =
       structdeclmap
 
   let structmap = structmap1 @ structmap0
+
+  
+  let ownership_list =
+    let rec iter ds =
+        match ds with
+            [] -> []
+        |   (sn, (l, Some a , _, _)) :: dss -> (printnow "Heeeeeeeeeereeeee%s %s\n" "111111" sn);
+                match a with
+                    (sn1, (l, _, _, _)) :: aa ->
+                        if(sn1 = "Owns") then
+                            match aa with
+                                [] -> [] (*Should through an exception here*)
+                            |   (sn, (_,_,_,_)) ::dss1 -> (printnow "Heeeeeeeeeereeeee%s\n" sn; iter dss1)
+                        else
+                            iter dss
+    in iter structmap1
 
   let field_offset l fparent fname =
     let (_, Some fmap, _, _) = List.assoc fparent structmap in
@@ -2098,10 +2116,7 @@ let print_context_stack_test cs =
         [] -> []
     |   Executing(h, env, l, msg) :: rest -> (remove_dups env)
     |   _ :: rest -> (return_env rest)
-    
-    
-                                
-
+              
 
     let print_otherpat pat =
         []
@@ -2146,8 +2161,11 @@ let print_context_stack_test cs =
         end
     else
     []
+  
 
-
+                        
+                            
+   
   let create_new_struct_map newstructmap =
     let rec iter ds = 
         match ds with

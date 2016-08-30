@@ -4,8 +4,11 @@ open Util
 open Stats
 open Lexer
 open Ast
+open Printf
 
 (* Region: the parser *)
+
+let printnow string1 string2 = kfprintf (fun _ -> flush stdout) stdout string1 string2
 
 let common_keywords = [
   "switch"; "case"; ":"; "return"; "for";
@@ -20,15 +23,10 @@ let common_keywords = [
 ]
 
 let ghost_keywords = [
-  "predicate"; "copredicate"; "autogen"; "autogencounter"; "Many"; "ghostcount"; "requires"; "|->"; "&*&"; "inductive"; "fixpoint";
-  "ensures"; "close"; "lemma"; "open"; "emp"; "invariant"; "lemma_auto";
+  "predicate"; "copredicate"; "autogen"; "autogencounter"; "Many"; "ghostcount"; "requires"; "|->"; "&*&"; "inductive"; "fixpoint"; "owns"; "counts"; "ensures"; "close"; "lemma"; "open"; "emp"; "invariant"; "lemma_auto";
   "_"; "@*/"; "predicate_family"; "predicate_family_instance"; "predicate_ctor"; "leak"; "@";
-  "box_class"; "action"; "handle_predicate"; "preserved_by"; "consuming_box_predicate"; "consuming_handle_predicate"; "perform_action"; "nonghost_callers_only";
-  "create_box"; "above"; "below"; "and_handle"; "and_fresh_handle"; "create_handle"; "create_fresh_handle"; "dispose_box"; 
-  "produce_lemma_function_pointer_chunk"; "duplicate_lemma_function_pointer_chunk"; "produce_function_pointer_chunk";
-  "producing_box_predicate"; "producing_handle_predicate"; "producing_fresh_handle_predicate"; "box"; "handle"; "any"; "split_fraction"; "by"; "merge_fractions";
-  "unloadable_module"; "decreases"; "load_plugin"; "forall_"; "import_module"; "require_module"; ".."; "extends"; "permbased";
-  "terminates";
+  "box_class"; "action"; "handle_predicate"; "preserved_by"; "consuming_box_predicate"; "consuming_handle_predicate"; "perform_action"; "nonghost_callers_only";"create_box"; "above"; "below"; "and_handle"; "and_fresh_handle"; "create_handle"; "create_fresh_handle"; "dispose_box"; "produce_lemma_function_pointer_chunk"; "duplicate_lemma_function_pointer_chunk"; "produce_function_pointer_chunk";
+  "producing_box_predicate"; "producing_handle_predicate"; "producing_fresh_handle_predicate"; "box"; "handle"; "any"; "split_fraction"; "by"; "merge_fractions"; "unloadable_module"; "decreases"; "load_plugin"; "forall_"; "import_module"; "require_module"; ".."; "extends"; "permbased"; "terminates";
 ]
 
 let c_keywords = [
@@ -676,7 +674,9 @@ and
 | [< f = parse_field_core Real >] -> f
 and
   parse_field_core gh = parser
-  [< te0 = parse_type; '(l, Ident f);
+   [< '(_, Kwd "owns") >] -> Owns
+|  [< '(_, Kwd "counts"); '(_, Ident counter) >] -> Counts(counter)
+|  [< te0 = parse_type; '(l, Ident f);
      te = parser
         [< '(_, Kwd ";") >] -> te0
       | [< '(_, Kwd "["); '(ls, Int size); '(_, Kwd "]"); '(_, Kwd ";") >] ->
@@ -684,6 +684,7 @@ and
               raise (ParseException (ls, "Array must have size > 0."));
             StaticArrayTypeExpr (l, te0, int_of_big_int size)
    >] -> Field (l, gh, te, f, Instance, Public, false, None)
+
 and
   parse_return_type = parser
   [< t = parse_type >] -> match t with ManifestTypeExpr (_, Void) -> None | _ -> Some t

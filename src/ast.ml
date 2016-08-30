@@ -689,6 +689,8 @@ and
       visibility *
       bool (* final *) *
       expr option
+  | Owns
+  | Counts of string
 and
   ctor = (* ?ctor *)
   | Ctor of

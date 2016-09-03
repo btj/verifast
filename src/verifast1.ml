@@ -31,6 +31,8 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
 
   include VerifyProgramArgs
 
+  let () = Hashtbl.clear Parser.typedefs
+
   let path = program_path
   
   let language = file_type path
@@ -3805,7 +3807,7 @@ let rec close_tail heap_leak l env =
             let (_, pts) = List.split pts in
             let rec type_is_inhabited tp =
               match tp with
-                Bool | Int (Signed, 4) | Int (Signed, 2) | Int (Unsigned, 4) | RealType | Int (Signed, 1) | PtrType _ | ObjType _ | ArrayType _ | BoxIdType | HandleIdType | AnyType -> true
+                Bool | Int (Signed, 4) | Int (Signed, 2) | Int (Unsigned, 4) | Int (Unsigned, 1) | Int (Unsigned, 2) | RealType | Int (Signed, 1) | PtrType _ | ObjType _ | ArrayType _ | BoxIdType | HandleIdType | AnyType -> true
               | TypeParam _ -> true  (* Should be checked at instantiation site. *)
               | PredType (tps, pts, _, _) -> true
               | PureFuncType (t1, t2) -> type_is_inhabited t2
@@ -3848,7 +3850,7 @@ let rec close_tail heap_leak l env =
             match tp with
               Bool -> Some []
             | TypeParam x -> Some [x]
-            | Int (Signed, 4) | Int (Signed, 2) | Int (Unsigned, 4) | RealType | Int (Signed, 1) | PtrType _ | PredType (_, _, _, _) | ObjType _ | ArrayType _ | BoxIdType | HandleIdType | AnyType -> None
+            | Int (Signed, 4) | Int (Signed, 2) | Int (Unsigned, 4) | Int (Unsigned, 1) | Int (Unsigned, 2) | RealType | Int (Signed, 1) | PtrType _ | PredType (_, _, _, _) | ObjType _ | ArrayType _ | BoxIdType | HandleIdType | AnyType -> None
             | PureFuncType (_, _) -> None (* CAVEAT: This assumes we do *not* have extensionality *)
             | InductiveType (i0, targs) ->
               begin match try_assoc i0 infinite_map with
@@ -4493,8 +4495,13 @@ let rec close_tail heap_leak l env =
       floating_point_fun_call_expr funcmap l t (string_of_operator operator) [TypedExpr (arg1, t); TypedExpr (arg2, t)]
     | _ -> WOperation (l, operator, [arg1; arg2], [t; t])
   
+  let next_temp_var_name =
+    let counter = ref 0 in
+    fun () -> let n = !counter in incr counter; Printf.sprintf "#x%d" n
+  
   let rec check_expr_core functypemap funcmap classmap interfmap (pn,ilist) tparams tenv (inAnnotation: bool option) e: (expr (* typechecked expression *) * type_ (* expression type *) * big_int option (* constant integer expression => value*)) =
     let check e = check_expr_core functypemap funcmap classmap interfmap (pn,ilist) tparams tenv inAnnotation e in
+    let check_with_extra_bindings tenv' e = check_expr_core functypemap funcmap classmap interfmap (pn,ilist) tparams (tenv' @ tenv) inAnnotation e in
     let checkcon e = check_condition_core functypemap funcmap classmap interfmap (pn,ilist) tparams tenv inAnnotation e in
     let checkt e t0 = check_expr_t_core_core functypemap funcmap classmap interfmap (pn,ilist) tparams tenv inAnnotation e t0 false in
     let checkt_cast e t0 = 
@@ -5126,48 +5133,12 @@ let rec close_tail heap_leak l env =
       let (w1, t1, _) = check e1 in
       let w2 = checkt e2 t1 in
       (AssignExpr (l, w1, w2), t1, None)
-    | AssignOpExpr(l, e1, (Add | Sub | Mul as operator), e2, postOp) ->
-      let (w1, t1, value1) = check e1 in
-      let lhs_type = t1 in
-      let (w2, t2, value2) = check e2 in
-      begin
-        match t1 with
-          PtrType pt1 when operator = Add || operator = Sub ->
-          begin match t2 with
-            PtrType pt2 when operator = Sub ->
-            if pt1 <> pt2 then static_error l "Pointers must be of same type" None;
-            if pt1 <> Int (Signed, 1) && pt1 <> Void then static_error l "Subtracting non-char pointers is not yet supported" None;
-            (WAssignOpExpr(l, w1, operator, w2, postOp, [t1; t2], lhs_type), intType, None)
-          | _ ->
-            let w2 = checkt e2 intt in
-            (WAssignOpExpr(l, w1, operator, w2, postOp, [t1; intType], lhs_type), t1, None)
-          end
-        | Int (Signed, 4) | RealType | Int (Signed, 2) | Int (Signed, 1) ->
-          let (w1, w2, t) = promote_checkdone l e1 e2 (w1, t1, value1) (w2, t2, value2) in
-          (WAssignOpExpr(l, w1, operator, w2, postOp, [t; t], lhs_type), t1, None)
-        | ObjType "java.lang.String" as t when operator = Add ->
-          let w2 = checkt e2 t in
-          (WAssignOpExpr(l, w1, operator, w2, postOp, [t1; ObjType "java.lang.String"], lhs_type), t1, None)
-        | _ -> static_error l ("Operand of addition, subtraction or multiplication must be pointer, integer, char, short, or real number: t1 "^(string_of_type t1)^" t2 "^(string_of_type t2)) None
-      end
-    | AssignOpExpr(l, e1, (And | Or | Xor as operator), e2, postOp) ->
+    | AssignOpExpr (l, e1, op, e2, postOp) ->
       let (w1, t1, _) = check e1 in
-      let (w2, t2, _) = check e2 in
-      let lhs_type = t1 in
-      let ts = [t1; t2] in
-      begin match (t1, t2) with
-        (Bool, Bool) -> (WAssignOpExpr(l, w1, operator, w2, postOp, ts, lhs_type), t1, None)
-      | ((Int (Signed, 1)|Int (Signed, 2)|Int (Signed, 4)), (Int (Signed, 1)|Int (Signed, 2)|Int (Signed, 4))) ->
-        (WAssignOpExpr(l, w1, (match operator with And -> BitAnd | Or -> BitOr | Xor -> BitXor), w2, postOp, ts, lhs_type), Int (Signed, 4), None)
-       | _ -> static_error l "Arguments to |=, &= and ^= must be boolean or integral types." None
-      end
-    | AssignOpExpr(l, e1, (ShiftLeft | ShiftRight | Div | Mod as operator), e2, postOp) ->
-      let (w1, t1, _) = check e1 in
-      if t1 <> intType then static_error (expr_loc e1) "Variable of type int expected" None;
-      let w2 = checkt e2 intType in
-      let lhs_type = intType in
-      let ts = [intType; intType] in
-      (WAssignOpExpr(l, w1, operator, w2, postOp, ts, lhs_type), intType, None)
+      let x = next_temp_var_name () in
+      let (w2, t2, _) = check_with_extra_bindings [(x, t1)] (Operation (l, op, [Var (l, x); e2])) in
+      let w2', _, _ = check (CastExpr (l, false, ManifestTypeExpr (l, t1), TypedExpr (w2, t2))) in
+      (WAssignOpExpr (l, w1, x, w2', postOp), t1, None)
     | InitializerList (l, es) ->
       let rec to_list_expr es =
         match es with

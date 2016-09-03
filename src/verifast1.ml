@@ -1861,7 +1861,7 @@ let print_context_stack_test cs =
   
   let structmap1 =
     List.map
-      (fun (sn, (l, fds_opt)) ->
+      (fun (sn, (l, fds_opt)) -> (printnow "Iam inside structmap1 %s\n" sn);
          let s = get_unique_var_symb ("struct_" ^ sn ^ "_size") intType in
          ignore $. ctxt#assume (ctxt#mk_lt (ctxt#mk_intlit 0) s);
          let rec iter fmap fds has_ghost_fields =
@@ -1884,9 +1884,9 @@ let print_context_stack_test cs =
              if List.mem_assoc f fmap then static_error lf "Duplicate field name." None;
              let t = check_pure_type ("", []) [] t in
              let offset = if gh = Ghost then None else Some (get_unique_var_symb (sn ^ "_" ^ f ^ "_offset") intType) in
-             let entry = (printnow "I am printing f %s\n" f); (f, (lf, gh, t, offset)) in
+             let entry = (f, (lf, gh, t, offset)) in
              iter (entry::fmap) fds (has_ghost_fields || gh = Ghost)
-           | Owns :: fds -> iter (("Owns",(l, Ghost, AnyType, None)) :: fmap) fds (true)
+           | Owns :: fds -> (printnow "%s\n" "I am tired");iter (("Owns",(l, Ghost, AnyType, None)) :: fmap) fds (true)
            | Counts(counter) :: fds -> iter (("Counts",(l, Ghost, AnyType, None)) :: fmap) fds (true)
          in
          begin
@@ -1900,7 +1900,7 @@ let print_context_stack_test cs =
   let structmap = structmap1 @ structmap0
 
   
-  let ownership_list =
+ (* let ownership_list =
     let rec iter ds =
         match ds with
             [] -> []
@@ -1914,6 +1914,9 @@ let print_context_stack_test cs =
                         else
                             iter dss
     in iter structmap1
+*)
+
+  
 
   let field_offset l fparent fname =
     let (_, Some fmap, _, _) = List.assoc fparent structmap in
@@ -1928,7 +1931,7 @@ let print_context_stack_test cs =
   (*By Mahmoud: The following is Automated VeriFast core *)
   
   (*return a seperate list of all the autogen annotations*)
-  let autgendeclmap=
+  (*let autgendeclmap=
     if(autofix || genPredicate) then begin
         let rec iter autodm ds =
             match ds with 
@@ -1957,7 +1960,7 @@ let print_context_stack_test cs =
         | _ when file_type path=Java -> []
     end
     else
-     []
+     []*)
 
 (*The following functin return the line no. of first struct in the code where predicates would be written above*)
     let loc_of_firststruct =
@@ -2170,7 +2173,7 @@ let print_context_stack_test cs =
     let rec iter ds = 
         match ds with
             [] -> newstructmap
-        |   (sn, (l, fds_opt))::dss -> 
+        |   (sn, (l, fds_opt))::dss ->
                 let rec add_struct_fields fds_opt =
                     match fds_opt with
                         Some([]) -> []
@@ -2178,12 +2181,74 @@ let print_context_stack_test cs =
                             Structfields((checkfieldtype a3), a4) :: (add_struct_fields (Some (a9)))
                 
                     |   Some (Field(a1,a2,a3,a4,a5,a6,a7, None) :: a9) ->
-                            Structfields((checkfieldtype a3), a4) :: (add_struct_fields (Some (a9)))   
+                            Structfields((checkfieldtype a3), a4) :: (add_struct_fields (Some (a9)))
                     
                     |   None -> []
+                    |   Some(Owns :: rest) -> (add_struct_fields (Some rest))
+                    |   Some(Counts(counter) :: rest) -> (add_struct_fields (Some rest)) 
                 in 
                 Structref(sn, add_struct_fields fds_opt, None) :: iter dss
     in iter structdeclmap
+
+
+let ownership_list = 
+    let rec iter ds = 
+        match ds with
+            [] -> []
+         |   (sn, (l, fds_opt))::dss -> (printnow "This is sn11, %s\n" sn);
+                let rec add_ownership fds_opt = (printnow "%s\n" "I am inside add_ownership");
+                    match fds_opt with
+                        Some([]) -> iter dss
+                    |   Some (Field(a1,a2,a3,a4,a5,a6,a7, Some (a8)) :: a9) -> (printnow "%s %s\n" sn a4);
+                            (add_ownership (Some (a9)))                
+                    |   Some (Field(a1,a2,a3,a4,a5,a6,a7, None) :: a9) -> (printnow "%s %s\n" sn a4);
+                            (add_ownership (Some (a9)))    
+                    |   None -> iter dss
+                    |   Some(Owns :: rest) -> (printnow "%s %s\n" sn "Inside owns");
+                            begin 
+                            match rest with
+                            |   Field(a1,a2,a3,a4,a5,a6,a7, Some (a8)) :: a9 -> ((printnow "%s %s \n" sn a4);
+                                    (Autogen(sn, a4) :: (add_ownership (Some a9))))
+                            |   Field(a1,a2,a3,a4,a5,a6,a7, None) :: a9 -> ((printnow "%s %s \n" sn a4);
+                                    (Autogen(sn, a4) :: (add_ownership (Some a9))))      
+                            end                              
+                    |   Some(Counts(counter) :: rest) -> (add_ownership (Some rest))
+                in add_ownership fds_opt
+    in iter structdeclmap
+
+
+    let ownership_counter_list =
+        let rec iter ds =
+            match ds with
+                [] -> []
+             |   (sn, (l, fds_opt))::dss ->
+                    let rec add_ownership_counter fds_opt =
+                        match fds_opt with
+                            Some([]) -> iter dss
+                        |   Some (Field(a1,a2,a3,a4,a5,a6,a7, Some (a8)) :: a9) -> 
+                                begin
+                                match a9 with                                
+                                    (Counts(counter) :: rest) -> Autogencounter((sn,counter),(sn, a4)) :: (add_ownership_counter (Some rest))     
+                                |   rest -> add_ownership_counter(Some rest) 
+                                end         
+                        |   Some (Field(a1,a2,a3,a4,a5,a6,a7, None) :: a9) ->
+                                begin
+                                match a9 with
+                                    (Counts(counter) :: rest) -> Autogencounter((sn,counter),(sn, a4)) :: (add_ownership_counter (Some rest))     
+                                |   rest -> add_ownership_counter(Some rest) 
+                                end         
+                        |   None -> iter dss
+                        |   Some(Owns :: rest) ->
+                                begin 
+                                match rest with
+                                |   Field(a1,a2,a3,a4,a5,a6,a7, Some (a8)) :: a9 -> 
+                                         (add_ownership_counter (Some a9))
+                                |   Field(a1,a2,a3,a4,a5,a6,a7, None) :: a9 ->
+                                         (add_ownership_counter (Some a9))      
+                                end                              
+                    in add_ownership_counter fds_opt
+    in iter structdeclmap
+
     
     let rec check_struct_structure newstructmap =
         match newstructmap with
@@ -2302,7 +2367,7 @@ let print_context_stack_test cs =
             else 
                 (print_autogen_fields structname fields autogenmap oc)
   
-  let rec check_other_counters autogenmap structname oc=
+  let rec check_other_counters autogenmap structname oc= 
     match autogenmap with
         [] -> ()
     |   Autogen(x,y) :: autogenmap ->
@@ -2328,8 +2393,8 @@ let print_context_stack_test cs =
                 let rec iter autogenmap0 =
                     match autogenmap0 with 
                         [] -> check_autogencounter autogencountermap oc structname autogenmap
-                    |   Autogen(x, y) :: autogenmap0 ->
-                            if(x = structname) then
+                    |   Autogen(x, y) :: autogenmap0 -> (printnow "I am inside Check_autogencounter: %s %s\n" x structname);
+                            if(x = structname) then ((printnow "Printing y: %s %s\n" y predicatefield);
                                 if(y = predicatefield) then
                                     begin
                                     output_string_file oc " &*& ";
@@ -2339,10 +2404,10 @@ let print_context_stack_test cs =
                                     check_autogencounter autogencountermap oc structname autogenmap
                                     end
                                 else
-                                    iter autogenmap0
+                                    iter autogenmap0)
                             else
                                 iter autogenmap0
-                in iter autogenmap 
+                in iter ownership_list 
                 end           
                                 
                                
@@ -2361,14 +2426,14 @@ let print_context_stack_test cs =
                 print_counter_constraints rest oc structname
 
 
-  let rec check_contain_llist autogenmap structname oc flag=
+  let rec check_contain_llist autogenmap structname oc flag= 
     match autogenmap with
         [] -> 
             if(flag = 0) then
                output_string_file oc ";) = \n"
             else
                output_string_file oc "; \n"
-    |   Autogen(x, y) :: autogenmap0 ->  
+    |   Autogen(x, y) :: autogenmap0 -> 
             if(x = structname) then 
                 begin
                 if (flag = 0) then 
@@ -2381,7 +2446,7 @@ let print_context_stack_test cs =
                     end
                 else 
                     begin
-                    let autogencountermap = (autogencounterdeclmap) in
+                    let autogencountermap = (*(autogencounterdeclmap)*) (ownership_counter_list) in
                         begin
                         check_autogencounter autogencountermap oc structname autogenmap;
                         print_counter_constraints autogenmap oc structname
@@ -2420,7 +2485,7 @@ let print_context_stack_test cs =
   let print_predicate_body structname fields autogenmap structure oc = 
     print_all_fields structname fields oc;
     print_string_predicate fields oc; (*This function ony checks if there is a field of type pointer to char and create a predicate of type string for it*) 
-    print_autogen_fields structname fields autogenmap oc; 
+    print_autogen_fields structname fields (*(ownership_list)*) autogenmap oc; 
     print_inner_structure structname structure autogenmap oc
     
 
@@ -2469,7 +2534,7 @@ let print_context_stack_test cs =
                     close_out oc            
               | line :: nextline -> 
                   if (i = line_no) then begin
-                      begin generate_predicate (autgendeclmap) oc (check_struct_structure (create_new_struct_map [])) end; 
+                      begin generate_predicate (*(autgendeclmap)*) (ownership_list) oc (check_struct_structure (create_new_struct_map [])) end; 
                       output_string_file oc "\n\n";
                       output_string_file oc line; 
                       modify (succ i) nextline 
@@ -2556,7 +2621,7 @@ let print_context_stack_test cs =
 
 (*The followoing function just take the predicate name and look at the heap to exact the struct name that is represented by this predicate name. It does that by checking the malloc_block struct heap chunk*)
 
-   let rec check_local_name name env = (printnow "This is what I am checking right now %s \n" name);
+   let rec check_local_name name env =
     match env with
         [] -> name
     |   (s,t) :: rest -> 
@@ -2694,7 +2759,7 @@ let print_context_stack_test cs =
         if((try(Str.search_forward (Str.regexp ",") paramname 0) with Not_found -> -1) > -1) then 
             try(String.sub paramname ((String.index paramname '?')+1) ((String.index paramname ',') - 1)) with _ -> "0"
         else
-            ((printnow "paramname %s\n" paramname); paramname )
+            paramname
     end
     else
         begin        
@@ -2715,7 +2780,7 @@ let print_context_stack_test cs =
  let rec check_predmap predicatename predmap structinstance s =
     match predmap with
         [] -> []
-    |   (name, param, body) :: rest ->  (printnow "Just checking where I am11: %s%s%s\n" (name) "   &&    " predicatename);
+    |   (name, param, body) :: rest -> 
             if(predicatename = name) then
                 let rec iter param i =
                     match param with
@@ -2826,10 +2891,10 @@ let rec create_assum_exp assumptions =
     
 let rec solve_assump_equations assumptions_list infered_count (counter: int) cs row =
     match assumptions_list with
-        [] -> (printnow "Where I am: %s\n" infered_count);(if(check_locality infered_count cs row) then (Printf.sprintf "%s%s%i" infered_count "-" counter) else (Printf.sprintf "%s%s" "?" infered_count ))
+        [] -> (if(check_locality infered_count cs row) then (Printf.sprintf "%s%s%i" infered_count "-" counter) else (Printf.sprintf "%s%s" "?" infered_count ))
     |   (left, right, value) :: partial_assumptions_list -> 
-            if(right = infered_count) then ((printnow "Chechk here: %s%s" infered_count right);
-                (solve_assump_equations assumptions_list left (counter + 1) cs row))
+            if(right = infered_count) then
+                (solve_assump_equations assumptions_list left (counter + 1) cs row)
             else 
                 solve_assump_equations partial_assumptions_list infered_count counter cs row
                        
@@ -2840,7 +2905,7 @@ let rec check_assumptions infered_count cs =
     |   Assuming t :: contextStack -> ctxt#pprint t
     |   _ :: contextStack -> check_assumptions infered_count contextStack
         
-let check_infered_conut infered_count cs row  = (printnow "I am inside check_infered_count %s\n" infered_count);
+let check_infered_conut infered_count cs row  =
     if((try (Str.search_forward (Str.regexp "[a-z+0-9*_*]+") infered_count 0) with Not_found -> -1) >= 0) then
         if(check_locality (Str.matched_string infered_count) cs row) then
             infered_count
@@ -2859,7 +2924,7 @@ let check_infered_conut infered_count cs row  = (printnow "I am inside check_inf
 let rec check_other_predicate_parameters predicatename predicatemap structinstance heap env msg s r =
     match predicatemap with
         [] -> []
-    |   (name, parameters, body) :: predicatemap -> (printnow "%s%s %s\n" "I am inside check_other_predicate_param: " name predicatename);
+    |   (name, parameters, body) :: predicatemap ->
             if(name = predicatename) then
               let rec iter parameters =
                     match parameters with
@@ -2901,7 +2966,7 @@ let rec check_other_predicate_parameters predicatename predicatemap structinstan
                                                         [] -> []
                                                 |       x :: y -> y
                                                 end
-                                        |   (Chunk ((g, literal), targs, coef, ts, size)) :: rest -> (printnow "I am inside, look here %s\n" (ctxt#pprint g));
+                                        |   (Chunk ((g, literal), targs, coef, ts, size)) :: rest ->
                                             if((ctxt#pprint g) = predicatename) then
                                             begin   
                                                 match ts with
@@ -3196,7 +3261,7 @@ let add_conditionalif predname parameters =
                                                         match parameters with
                                                             x :: y ->   
                                                                 let mssg = try (Str.replace_first (Str.regexp (Printf.sprintf "%s%s" predname "(result)")) (Printf.sprintf "%s%s%s%s%s" "result == " x " ? true :" predname "(result)") (return_line s r)) with _ -> (return_line s r) in
-                                                                    (externalprint_post_condition (lines_from_files s) s mssg ((print_line ((search_context_stack_pre !contextStack)))+1); (printnow "%s\n" "Whre is the error?");    true); 
+                                                                    (externalprint_post_condition (lines_from_files s) s mssg ((print_line ((search_context_stack_pre !contextStack)))+1); true); 
                                                         end 
                                                     else iter env                                 
                                                     end  

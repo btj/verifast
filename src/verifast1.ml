@@ -1982,7 +1982,7 @@ let print_context_stack_test cs =
         match type_ with
             Bool -> "Bool"
           | Void -> "Void"
-          | Int(s,i) -> "Int"
+          | Int(s,i) -> (printnow "%s%i\n" "I am assigning Int: " i);if( i = 1) then "char" else "Int"
           | RealType -> "Other"  (* Mathematical real numbers. Used for fractional permission coefficients. Also used for reasoning about floating-point code. *)
           | Float -> "Float"
           | Double -> "Double"
@@ -2201,10 +2201,17 @@ let ownership_list =
                 let rec add_ownership fds_opt = (printnow "%s\n" "I am inside add_ownership");
                     match fds_opt with
                         Some([]) -> iter dss
-                    |   Some (Field(a1,a2,a3,a4,a5,a6,a7, Some (a8)) :: a9) -> (printnow "%s %s\n" sn a4);
-                            (add_ownership (Some (a9)))                
-                    |   Some (Field(a1,a2,a3,a4,a5,a6,a7, None) :: a9) -> (printnow "%s %s\n" sn a4);
-                            (add_ownership (Some (a9)))    
+                    |   Some (Field(a1,a2,a3,a4,a5,a6,a7, Some (a8)) :: a9) -> (printnow "Type:::%s\n" (checkfieldtype a3) );
+                            if((checkfieldtype a3) ="char") then   
+                                (Autogen("string1", a4) :: add_ownership (Some (a9)))
+                            else
+                                add_ownership (Some (a9))              
+                    |   Some (Field(a1,a2,a3,a4,a5,a6,a7, None) :: a9) -> (printnow "Type:::%s\n" (checkfieldtype a3) );
+                             if((checkfieldtype a3) ="char") then   
+                                (Autogen("string1", a4) :: add_ownership (Some (a9)))  
+                             else
+                                add_ownership (Some (a9))                
+
                     |   None -> iter dss
                     |   Some(Owns :: rest) -> (printnow "%s %s\n" sn "Inside owns");
                             begin 
@@ -2391,7 +2398,7 @@ let ownership_list =
             else if(predicatename <> structname) then
                 check_autogencounter autogencountermap oc structname autogenmap
             else
-                begin
+          (*      begin
                 let rec iter autogenmap0 =
                     match autogenmap0 with 
                         [] -> check_autogencounter autogencountermap oc structname autogenmap
@@ -2399,6 +2406,7 @@ let ownership_list =
                             if(x = structname) then ((printnow "Printing y: %s %s\n" y predicatefield);
                                 if(y = predicatefield) then
                                     begin
+                                    (printnow "%s\n" "Trueeee1111111111");
                                     output_string_file oc " &*& ";
                                     output_string_file oc y;
                                     output_string_file oc "_count1 == ";
@@ -2409,8 +2417,20 @@ let ownership_list =
                                     iter autogenmap0)
                             else
                                 iter autogenmap0
-                in iter ownership_list 
-                end           
+                in iter autogenmap0 
+                end  *)
+            begin
+                if(predicatename = structname) then
+                begin
+                    output_string_file oc " &*& ";
+                    output_string_file oc predicatefield;
+                    output_string_file oc "_count1 == ";
+                    output_string_file oc predicatefield1;
+                    check_autogencounter autogencountermap oc structname autogenmap
+                end                
+                else
+                    check_autogencounter autogencountermap oc structname autogenmap
+            end            
                                 
                                
     let rec print_counter_constraints autogenmap oc structname =
@@ -2451,7 +2471,7 @@ let ownership_list =
                     let autogencountermap = (*(autogencounterdeclmap)*) (ownership_counter_list) in
                         begin
                         check_autogencounter autogencountermap oc structname autogenmap;
-                        print_counter_constraints autogenmap oc structname
+                        (*print_counter_constraints autogenmap oc structname*)
                         end
                     end
                 end

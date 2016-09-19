@@ -664,7 +664,7 @@ and
       action_decl list *
       handle_pred_decl list
   (* enum def met line - name - elements *)
-  | Autogen of string * string
+  | Autogen of string * string * string
   | Autogencounter of (string * string) * (string * string)
   | EnumDecl of loc * string * (string * expr option) list
   | Global of loc * type_expr * string * expr option

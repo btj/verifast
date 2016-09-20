@@ -1883,8 +1883,8 @@ let print_context_stack_test cs =
              let offset = if gh = Ghost then None else Some (get_unique_var_symb (sn ^ "_" ^ f ^ "_offset") intType) in
              let entry = (f, (lf, gh, t, offset)) in
              iter (entry::fmap) fds (has_ghost_fields || gh = Ghost)
-           | Owns :: fds -> (printnow "%s\n" "I am tired");iter (("Owns",(l, Ghost, AnyType, None)) :: fmap) fds (true)
-           | Counts(counter) :: fds -> iter (("Counts",(l, Ghost, AnyType, None)) :: fmap) fds (true)
+           | Owns :: fds -> (printnow "%s\n" "I am tired");iter (fmap) fds (true)
+           | Counts(counter) :: fds -> iter (fmap) fds (true)
          in
          begin
            match fds_opt with

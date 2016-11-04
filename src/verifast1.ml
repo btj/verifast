@@ -2046,7 +2046,7 @@ let print_context_stack_test cs =
           | Null(_) ->  ("","")
           | Var(_,s3) ->  ("", s3)  (* An identifier. *)
           | Operation(_,_,_) ->  ("","")
-          | IntLit (_,_) ->  ("","")
+          | IntLit (_,_,_,_,_) ->  ("","")
           | RealLit(_,_) -> ("","")
           | StringLit(_,_) -> ("","")
           | ClassLit(_,_) -> ("","") (* class literal in java *)

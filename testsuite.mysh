@@ -350,6 +350,7 @@ cd tutorial_solutions
   verifast_both -c -disable_overflow_check predctors.c
   verifast_both -c -disable_overflow_check threads0.c
   verifast_both -c -disable_overflow_check threads.c
+  verifast_both -c -disable_overflow_check fractions0.c
   verifast_both -c -disable_overflow_check fractions.c
   verifast_both -c -disable_overflow_check precise.c
   verifast_both -c -disable_overflow_check precise_bad_merge.c
@@ -373,6 +374,7 @@ cd tests
   verifast_both -c test-pattern-match-constructor-subtyping.c
   verifast_both -c test-octal-number.c
   verifast_both -c integral-ghost-types.c
+  verifast_both -c -allow_should_fail longlong.c
   verifast_both -c test-precise-predicate-pointsto.c
   cd copredicates
     mysh < run.mysh

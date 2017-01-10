@@ -121,7 +121,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
  let rec return_leaked_chunk_arguments ts = match ts with 
    x :: [] -> return_leaked_context_term x :: [];       
   |x :: y -> (return_leaked_context_term x) :: (return_leaked_chunk_arguments y)
-   
+  | _ -> []   
 
 
  let print_leaked_chunk h msg = 
@@ -474,7 +474,20 @@ let return_line file line =
                 |   _ -> iter rest)
         |   _ :: rest -> iter rest
     in iter cs
-                        
+    
+ let search_context_stack_while0 cs =
+    let rec iter cs =
+        match cs with 
+            [] -> 0
+        |   Executing(h, env, l, msg) :: rest ->
+                (match msg with
+                    "Evaluating loop condition" -> 
+                        (match l with 
+                            ((s, r, col), (s1, r1, col1)) ->  r)
+                |   _ -> iter rest)
+        |   _ :: rest -> iter rest
+    in iter cs
+                    
 
   let register_pred_ctor_application t symbol symbol_term ts inputParamCount =
     pred_ctor_applications := (t, (symbol, symbol_term, ts, inputParamCount)) :: !pred_ctor_applications
@@ -2001,7 +2014,8 @@ let print_context_stack_test cs =
           | StructType(s) -> "String"
           | PtrType(t) -> "Other"
           | FuncType(s) -> "Other"   (* The name of a typedef whose body is a C function type. *)
-       (*   | InductiveType of string * type_ list -> "Other"
+          | _ -> "Other"
+          (*| InductiveType of string * type_ list -> "Other"
           | PredType of string list * type_ list * int option * inductiveness -> "Other" (* if None, not necessarily precise; if Some n, precise with n input parameters *)
           | PureFuncType of type_ * type_ -> "Other"  (* Curried *)
           | ObjType of string -> "Other"
@@ -3437,6 +3451,29 @@ let add_conditionalif predname parameters =
                 end
     |   _ -> false
 
+
+
+(*The following function is written by me to replace the Search_forward funciton within the Str Module because of the inconsistancy found in the module's function*)
+let rec search_forward0 (line : string) (message : string) (linecounter: int) (messagecounter: int) =
+    if(messagecounter >= String.length message) then
+        1
+    else if(linecounter >= String.length line) then
+       -1
+    else
+    begin
+        let m = message.[messagecounter] in 
+        begin
+            if(line.[linecounter] = m) then search_forward0 line message (linecounter+1) (messagecounter+1)
+            else search_forward0 line message (linecounter+1) 0
+        end
+    end
+
+
+let check_missingheap_exist_pre line message =
+    match line with
+        "" -> -1
+    |   line -> (search_forward0 line message 0 0)
+
 let find_missingheap predname targs parameters h env =
     if(autofix) then begin
         if(add_conditionalif predname parameters) then 
@@ -3490,7 +3527,7 @@ let find_missingheap predname targs parameters h env =
                                 in
                                 if((try(Str.search_forward(Str.regexp (Printf.sprintf "%s%s" predicatename "_")) (return_line s (print_line ((search_context_stack_pre !contextStack))) ) 0) with Not_found -> -1) > -1)                                 then
                                     let messg = Printf.sprintf "%s%s%s%s%s%s" predname "(" x ", ?" predname "0 )" in
-                                        externalprint_pre (lines_from_files s) s messg (print_line ((search_context_stack_pre !contextStack)))  
+                                       ( externalprint_pre (lines_from_files s) s messg (print_line ((search_context_stack_pre !contextStack))); printnow "%s\n" "case 1"  )
                                 else   
                                   let message = (search_heap predicatename heap r parameters) in
                                     if(message = "") then
@@ -3504,18 +3541,23 @@ let find_missingheap predname targs parameters h env =
                                             in iter (print_predicates)
                                        in
                                        let message = Printf.sprintf "%s%s%s%s" predicatename "(" (String.concat "," (parameters_list0 parameters r true predicateparam)) ")" 
+                                       and message1 = Printf.sprintf "%s%s%s%s" predicatename "(" (String.concat ",?" (parameters_list0 parameters r true predicateparam)) ")"
                                        in 
-                                            externalprint_pre (lines_from_files s) s message (print_line ((search_context_stack_pre !contextStack))))
+                                            (match (search_context_stack_while0 !contextStack) with
+                                                0 -> externalprint_pre (lines_from_files s) s message (print_line ((search_context_stack_pre !contextStack))); printnow "%s\n" "case 2"
+                                            |   x -> match (check_missingheap_exist_pre (return_line s (x+1)) message1) with
+                                                       -1 -> externalprint_pre (lines_from_files s) s message (print_line (x+1)); printnow "%s\n" message 
+                                                     | _ -> ()))          
                                     else
                                        externalprint_open_stmt (lines_from_files s) s message (r-1);
                                        if((try (Str.search_forward (Str.regexp "count[0-9]*") message 0) with Not_found -> -1) > -1) then
                                             let message1 = Str.matched_string message in
                                                 if((try (Str.search_forward (Str.regexp "[-][0-9]+") message 0) with Not_found -> -1) > -1) then
                                                     let message2 = Printf.sprintf "%s %s %s" message1 ">" (String.sub (Str.matched_string message) 1 ((String.length (Str.matched_string message)) - 1)) in
-                                                        externalprint_pre (lines_from_files s) s message2 (print_line ((search_context_stack_pre !contextStack)))                          
+                                                        (externalprint_pre (lines_from_files s) s message2 (print_line ((search_context_stack_pre !contextStack))); printnow "%s\n" "case 3")                          
                                                 else
                                                     let message2 = Printf.sprintf "%s %s" message1 "> 0" in
-                                                        externalprint_pre (lines_from_files s) s message2 (print_line ((search_context_stack_pre !contextStack)))
+                                                        (externalprint_pre (lines_from_files s) s message2 (print_line ((search_context_stack_pre !contextStack))); printnow "%s\n" "case 4")
              end
   end
     

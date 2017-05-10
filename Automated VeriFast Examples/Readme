@@ -1,0 +1,2 @@
+This folder contains some examples of using Automated VeriFast to infer Loop specifications. 
+Loop specifications in addition to functions' contracts are all initalised to true. Just press the AutoFix button until the verification is succeeded. 

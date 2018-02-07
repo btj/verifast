@@ -66,29 +66,23 @@ struct memb {  unsigned short size;  unsigned short num;  char *count;
 
 /*---------------------------------------------------------------------------*/
 void memb_init(struct memb *m)
-//@requires true &*& memb(m);
-//@ensures true &*& memb(m);
+//@requires true;
+//@ensures true;
 {
- ////@open memb(m,count0);
   memset(m->count, 0, m->num);
   memset(m->mem, 0, (unsigned short) (m->size * m->num));
 }
 /*---------------------------------------------------------------------------*/
 void *memb_alloc(struct memb *m)
-//@requires true &*& memb(m);
-//@ensures true &*& memb(m);
+//@requires true;
+//@ensures true;
 {
   int i;
 
   for(i = 0; i < m->num; ++i) 
-  ///@requires m->num |-> ?num &*& m->count |-> ?count &*& chars(count,num,_) &*& i >= 0 &*& i <= num;
-  ///@ensures m->num |-> num &*& m->count |-> count &*& chars(count,num,_) &*& i >= 0 &*& i >= num;
-  //@requires true &*& memb_size(m, ?size) &*& memb_num(m, ?num) &*& memb_count(m, ?count1) &*& memb_mem(m, ?mem) &*& chars(count1,num,_) &*& chars(mem,size*num,_) &*& malloc_block_memb(m)  &*& i>= 0 &*&i<= num;
-  //@ensures true &*& memb(m);
-  {
-    
-   // //@chars_split(count, i);
-    
+  //@requires true;
+  //@ensures true;
+  {   
     if(m->count[i] == 0) {
       /* If this block was unused, we increase the reference count to
 	 indicate that it now is used and return a pointer to the
@@ -113,8 +107,8 @@ void *memb_alloc(struct memb *m)
 
 }/*---------------------------------------------------------------------------*/
 char memb_free(struct memb *m, void *ptr)
-//@requires true &*& memb(m);
-//@ensures true &*& memb(m);
+//@requires true;
+//@ensures true;
 {
   int i;
   char *ptr2;
@@ -123,10 +117,8 @@ char memb_free(struct memb *m, void *ptr)
      which the pointer "ptr" points to. */
   ptr2 = (char *)m->mem;
   for(i = 0; i < m->num; ++i) 
-  ///@requires m->num |-> ?num &*& m->count |-> ?count &*& chars(count,num,_) &*& m->size |-> ?size &*& i >= 0 &*& i <= num;
-  ///@ensures m->num |-> num &*& m->count |-> count &*& chars(count,num,_) &*& m->size |-> size &*& i >= 0 &*& i >= num;
-  //@requires true &*& memb_size(m, ?size) &*& memb_num(m, ?num) &*& memb_count(m, ?count1) &*& memb_mem(m, ?mem) &*& chars(count1,num,_) &*& chars(mem,size*num,_) &*& malloc_block_memb(m)  &*& i>= 0 &*&i<= num;
-  //@ensures true &*& memb(m);
+  //@requires true;
+  //@ensures true;
   {
     
     if(ptr2 == (char *)ptr) {
@@ -146,8 +138,8 @@ char memb_free(struct memb *m, void *ptr)
 }
 /*---------------------------------------------------------------------------*/
 int memb_inmemb(struct memb *m, void *ptr)
-//@requires true &*& memb(m);
-//@ensures true &*& memb(m);
+//@requires true;
+//@ensures true;
 {
 	bool x = (char *)ptr >= (char *)m->mem &&
     (char *)ptr < (char *)m->mem + (m->num * m->size);
@@ -159,15 +151,15 @@ int memb_inmemb(struct memb *m, void *ptr)
 }
 /*---------------------------------------------------------------------------*/
 int memb_numfree(struct memb *m)
-//@requires true &*& memb(m);
-//@ensures true &*& memb(m);
+//@requires true;
+//@ensures true;
 {
   int i;
   int num_free = 0;
 
   for(i = 0; i < m->num; ++i) 
-  //@requires true &*& memb_size(m, ?size) &*& memb_num(m, ?num) &*& memb_count(m, ?count1) &*& memb_mem(m, ?mem) &*& chars(count1,num,_) &*& chars(mem,size*num,_) &*& malloc_block_memb(m)  &*& i>= 0 &*&i<= num;
-  //@ensures true &*& memb(m);
+  //@requires true;
+  //@ensures true;
   {
     if(m->count[i] == 0) {
       ++num_free;

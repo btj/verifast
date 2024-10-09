@@ -9,6 +9,15 @@ pub struct CellU32 {
 // [[cell(tau)]].OWN(t, vs) = [[tau]].OWN(t, vs)
 pred <CellU32>.own(t, cellU32;) = true; // The `v` parameter type carries the info
 
+lem CellU32_drop()
+    req CellU32_own(?t, ?v);
+    ens std::cell::UnsafeCell_own(t, v.v);
+{
+    open CellU32_own(t, v);
+    close u32_own(t, std::cell::UnsafeCell_inner::<u32>(v.v));
+    close std::cell::UnsafeCell_own::<u32>()(t, v.v);
+}
+
 /* A note on `|= cell(tau) copy` judgement:
 In RustBelt `|= tau copy => |= cell(tau) copy` but it is not the case in Rust as it is prohibited
 exceptionally for preventing potential pitfalls.
@@ -19,7 +28,7 @@ i.e. in VeriFast the `[[u32]].OWN` is implicitly persistent.
 */
 
 pred_ctor CellU32_nonatomic_borrow_content(l: *CellU32, t: thread_id_t)(;) =
-  (*l).v |-> ?v &*& struct_CellU32_padding(l);
+  *(&(*l).v as *u32) |-> ?v &*& struct_CellU32_padding(l);
 
 // `SHR` for Cell<u32>
 pred <CellU32>.share(k, t, l) =
@@ -43,10 +52,12 @@ lem CellU32_share_full(k: lifetime_t, t: thread_id_t, l: *CellU32)
 {
   produce_lem_ptr_chunk implies(CellU32_full_borrow_content(t, l), CellU32_nonatomic_borrow_content(l, t))() {
     open CellU32_full_borrow_content(t, l)();
+    std::cell::open_points_to_UnsafeCell(&(*l).v);
     close CellU32_nonatomic_borrow_content(l, t)();
   } {
     produce_lem_ptr_chunk implies(CellU32_nonatomic_borrow_content(l, t), CellU32_full_borrow_content(t, l))() {
       open CellU32_nonatomic_borrow_content(l, t)();
+      std::cell::close_points_to_UnsafeCell(&(*l).v);
       close CellU32_full_borrow_content(t, l)();
     } {
       full_borrow_implies(k, CellU32_full_borrow_content(t, l), CellU32_nonatomic_borrow_content(l, t));

@@ -6,14 +6,14 @@ pub struct Cell<T> {
 
 /*@
 
-pred<T> <Cell<T>>.own(t, cell) = <T>.own(t, cell.v);
+pred<T> <Cell<T>>.own(t, cell) = <T>.own(t, std::cell::UnsafeCell_inner(cell.v));
 
 lem Cell_send<T>(t1: thread_id_t)
     req type_interp::<T>() &*& Cell_own::<T>(?t, ?cell) &*& is_Send(typeid(T)) == true;
     ens type_interp::<T>() &*& Cell_own::<T>(t1, cell);
 {
     open Cell_own::<T>(t, cell);
-    Send::send(t, t1, cell.v);
+    Send::send(t, t1, std::cell::UnsafeCell_inner(cell.v));
     close Cell_own::<T>(t1, cell);
 }
 
@@ -28,7 +28,7 @@ is derivable.
 */
 
 pred_ctor Cell_nonatomic_borrow_content<T>(l: *Cell<T>, t: thread_id_t)() =
-  Cell_v(l, ?v) &*& struct_Cell_padding(l) &*& Cell_own(t, Cell::<T> { v });
+  *(&(*l).v as *T) |-> ?v &*& struct_Cell_padding(l) &*& <T>.own(t, v);
 
 // `SHR` for Cell<u32>
 pred<T> <Cell<T>>.share(k, t, l) =
@@ -52,10 +52,14 @@ lem Cell_share_full<T>(k: lifetime_t, t: thread_id_t, l: *Cell<T>)
 {
   produce_lem_ptr_chunk implies(Cell_full_borrow_content(t, l), Cell_nonatomic_borrow_content(l, t))() {
     open Cell_full_borrow_content::<T>(t, l)();
+    std::cell::open_points_to_UnsafeCell(&(*l).v);
+    open Cell_own::<T>(t, _);
     close Cell_nonatomic_borrow_content::<T>(l, t)();
   } {
     produce_lem_ptr_chunk implies(Cell_nonatomic_borrow_content(l, t), Cell_full_borrow_content(t, l))() {
       open Cell_nonatomic_borrow_content::<T>(l, t)();
+      std::cell::close_points_to_UnsafeCell(&(*l).v);
+      close Cell_own::<T>(t, Cell::<T> { v: (*l).v });
       close Cell_full_borrow_content::<T>(t, l)();
     } {
       full_borrow_implies(k, Cell_full_borrow_content(t, l), Cell_nonatomic_borrow_content(l, t));
@@ -85,13 +89,9 @@ impl<T> Cell<T> {
             //@ thread_token_split(_t, MaskTop, mask);
             //@ open_nonatomic_borrow('a, _t, mask, _q_a);
             //@ open Cell_nonatomic_borrow_content::<T>(self, _t)();
-            //@ open Cell_own::<T>(_t, ?cell);
-            //@ open Cell_v(self, cell.v);
             let result = std::ptr::read(self.v.get());
             std::ptr::write(self.v.get(), v);
             //@ assert partial_thread_token(_t, ?mask0);
-            //@ close Cell_v(self, v);
-            //@ close Cell_own::<T>(_t, Cell::<T> { v });
             //@ close Cell_nonatomic_borrow_content::<T>(self, _t)();
             //@ close_nonatomic_borrow();
             //@ thread_token_merge(_t, mask0, mask);
@@ -113,10 +113,8 @@ impl<T> Cell<T> {
         //@ thread_token_split(_t, mask_diff(MaskTop, ms), mo);
         //@ open_nonatomic_borrow('a, _t, ms, _q_a/2);
         //@ open Cell_nonatomic_borrow_content::<T>(self, _t)();
-        //@ open Cell_v(self, ?vs);
         //@ open_nonatomic_borrow('a, _t, mo, _q_a/2);
         //@ open Cell_nonatomic_borrow_content::<T>(other, _t)();
-        //@ open Cell_v(other, ?vo);
         let ps = self.v.get();
         let po = other.v.get();
         unsafe {
@@ -124,9 +122,7 @@ impl<T> Cell<T> {
             std::ptr::write(po, std::ptr::read(ps));
             std::ptr::write(ps, tmp);
         }
-        //@ close Cell_v(other, vs);
         //@ close Cell_nonatomic_borrow_content::<T>(other, _t)();
-        //@ close Cell_v(self, vo);
         //@ close Cell_nonatomic_borrow_content::<T>(self, _t)();
         //@ assert partial_thread_token(_t, ?rem);
         //@ close_nonatomic_borrow();
@@ -142,6 +138,7 @@ impl<T> Drop for Cell<T> {
     fn drop<'a>(self: &'a mut Cell<T>) {
         //@ open Cell_full_borrow_content::<T>(_t, self)();
         //@ open Cell_own::<T>(_t, ?v);
+        //@ close std::cell::UnsafeCell_own::<T>(_t, v.v);
     }
 
 }

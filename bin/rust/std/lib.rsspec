@@ -4,6 +4,46 @@ abstract_type type_info;
 
 @*/
 
+mod cell {
+
+    struct UnsafeCell<T>;
+    
+    /*@
+    
+    fix UnsafeCell_inner<T>(cell: UnsafeCell<T>) -> T;
+    fix UnsafeCell_new_<T>(value: T) -> UnsafeCell<T>;
+    
+    lem_auto UnsafeCell_inner_new_<T>(value: T);
+        req true;
+        ens UnsafeCell_inner(UnsafeCell_new_(value)) == value;
+    
+    pred UnsafeCell_own_<T>(t: thread_id_t, cell: UnsafeCell<T>);
+    pred_ctor UnsafeCell_own<T>()(t: thread_id_t, cell: UnsafeCell<T>) = <T>.own(t, UnsafeCell_inner(cell));
+    
+    lem open_points_to_UnsafeCell<T>(cell: *UnsafeCell<T>);
+        req *cell |-> ?value;
+        ens *(cell as *T) |-> UnsafeCell_inner(value);
+    
+    lem close_points_to_UnsafeCell<T>(cell: *UnsafeCell<T>);
+        req *(cell as *T) |-> ?value;
+        ens *cell |-> UnsafeCell_new_(value);
+    
+    @*/
+    
+    impl<T> UnsafeCell<T> {
+    
+        fn new(value: T) -> UnsafeCell<T>;
+        //@ req true;
+        //@ ens result == UnsafeCell_new_(value);
+        
+        fn get<'a>(self: &'a UnsafeCell<T>) -> *mut T;
+        //@ req true;
+        //@ ens result == self as *T;
+
+    }
+        
+}
+
 mod intrinsics {
 
     unsafe fn copy_nonoverlapping<T>(src: *mut T, dst: *mut T, count: usize);

@@ -2824,12 +2824,14 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         end
         ps;
       ctxt#begin_formal;
-      let xs = Array.init (List.length ps) (fun j -> ctxt#mk_bound j (typenode_of_type (snd (List.nth ps j)))) in
-      let xs = Array.to_list xs in
-      let Some(env) = zip (List.map fst ps) xs in
+      let typeid_tparams = List.filter tparam_carries_typeid tparams' in
+      let typeid_env = List.map (fun x -> (x ^ "_typeid", ctxt#type_inductive)) typeid_tparams in
+      let ps_env = List.map (fun (x, tp) -> (x, typenode_of_type tp)) ps in
+      let tn_env = typeid_env @ ps_env in
+      let env = List.mapi (fun i (x, tn) -> (x, ctxt#mk_bound i tn)) tn_env in
       let t_pre = eval None env pre in
       let t_post = eval None env post in
-      let tps = (List.map (fun (x, t) -> (typenode_of_type t)) ps) in
+      let tps = List.map snd tn_env in
       let trigger = (
       match trigger with
         None -> []

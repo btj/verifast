@@ -11,7 +11,7 @@ pred_ctor dlft_pred(dk: lifetime_t)(gid: usize; destroyed: bool) = ghost_cell(gi
 
 pred_ctor rc_na_inv(dk: lifetime_t, gid: usize, ptr: *RcBoxU32, t: thread_id_t)() =
     counting(dlft_pred(dk), gid, ?sn, ?destroyed) &*& if destroyed { true } else {
-        (*ptr).strong |-> sn &*& sn >= 1 &*&
+        *(&(*ptr).strong as *usize) |-> sn &*& sn >= 1 &*&
         std::alloc::alloc_block(ptr as *u8, std::alloc::Layout::new_::<RcBoxU32>()) &*& struct_RcBoxU32_padding(ptr) &*&
         borrow_end_token(dk, u32_full_borrow_content(t, &(*ptr).value))
     };
@@ -143,6 +143,7 @@ impl RcU32 {
             //@ let frac = create_ticket(dlft_pred(dk), gid);
             //@ close u32_full_borrow_content(_t, &(*p).value)();
             //@ borrow(dk, u32_full_borrow_content(_t, &(*p).value));
+            //@ std::cell::open_points_to_UnsafeCell(&(*p).strong);
             //@ close rc_na_inv(dk, gid, p, _t)();
             //@ na_inv_new(_t, MaskNshrSingle(p), rc_na_inv(dk, gid, p, _t));
             //@ full_borrow_into_frac(dk, u32_full_borrow_content(_t, &(*p).value));
@@ -236,7 +237,9 @@ impl Drop for RcU32 {
             //@ open_na_inv(_t, MaskNshrSingle(ptr), rc_na_inv(dk, gid, ptr, _t));
             //@ open rc_na_inv(dk, gid, ptr, _t)();
             //@ counting_match_fraction(dlft_pred(dk), gid);
-            *strong = *strong - 1;
+            let n = *strong;
+            //@ produce_limits(n);
+            *strong = n - 1;
             //@ destroy_ticket(dlft_pred(dk), gid);
             if *strong == 0 {
                 //@ stop_counting(dlft_pred(dk), gid);
@@ -244,6 +247,7 @@ impl Drop for RcU32 {
                 //@ end_lifetime(dk);
                 //@ borrow_end(dk, u32_full_borrow_content(_t, &(*ptr).value));
                 //@ open u32_full_borrow_content(_t, &(*ptr).value)();
+                //@ std::cell::close_points_to_UnsafeCell(&(*ptr).strong);
                 //@ close RcBoxU32_strong_(ptr, _);
                 //@ close RcBoxU32_value_(ptr, _);
                 //@ open_struct(ptr);

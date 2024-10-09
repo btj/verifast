@@ -23,7 +23,7 @@ pred_ctor dlft_pred(dk: lifetime_t)(gid: usize; destroyed: bool) = ghost_cell(gi
 
 pred_ctor rc_na_inv<T>(dk: lifetime_t, gid: usize, ptr: *RcBox<T>, t: thread_id_t)() =
     counting(dlft_pred(dk), gid, ?sn, ?destroyed) &*& if destroyed { true } else {
-        (*ptr).strong |-> sn &*& sn >= 1 &*&
+        *(&(*ptr).strong as *usize) |-> sn &*& sn >= 1 &*&
         std::alloc::alloc_block(ptr as *u8, std::alloc::Layout::new_::<RcBox<T>>()) &*& struct_RcBox_padding::<T>(ptr) &*&
         borrow_end_token(dk, <T>.full_borrow_content(t, &(*ptr).value))
     };
@@ -149,6 +149,7 @@ impl<T> Rc<T> {
             //@ open RcBox_value(_, _);
             //@ close_full_borrow_content::<T>(_t, &(*p).value);
             //@ borrow(dk, <T>.full_borrow_content(_t, &(*p).value));
+            //@ std::cell::open_points_to_UnsafeCell(&(*p).strong);
             //@ close rc_na_inv::<T>(dk, gid, p, _t)();
             //@ na_inv_new(_t, MaskNshrSingle(p), rc_na_inv(dk, gid, p, _t));
             //@ share_full_borrow::<T>(dk, _t, &(*p).value);
@@ -251,7 +252,9 @@ impl<T> Drop for Rc<T> {
             //@ open_na_inv(_t, MaskNshrSingle(ptr), rc_na_inv(dk, gid, ptr, _t));
             //@ open rc_na_inv::<T>(dk, gid, ptr, _t)();
             //@ counting_match_fraction(dlft_pred(dk), gid);
-            *strong = *strong - 1;
+            let n = *strong;
+            //@ produce_limits(n);
+            *strong = n - 1;
             //@ destroy_ticket(dlft_pred(dk), gid);
             if *strong == 0 {
                 //@ stop_counting(dlft_pred(dk), gid);
@@ -266,6 +269,7 @@ impl<T> Drop for Rc<T> {
                 //@ thread_token_merge(_t, mask_diff(MaskTop, MaskNshrSingle(ptr)), MaskNshrSingle(ptr));
                 //@ close thread_token(_t);
                 std::ptr::drop_in_place(&mut (*self.ptr.as_ptr()).value as *mut T);
+                //@ std::cell::close_points_to_UnsafeCell(&(*ptr).strong);
                 //@ close RcBox_strong_(ptr, _);
                 //@ open_struct(ptr);
                 //@ close std::ptr::NonNull_own::<RcBox<T>>(_t, nnp);

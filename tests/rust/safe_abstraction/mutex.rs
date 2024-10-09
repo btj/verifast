@@ -17,14 +17,15 @@ pub struct Mutex<T: Send> {
 
 pred True(;) = true;
 pred<T> <Mutex<T>>.own(t, mutex) =
-    sys::locks::SysMutex(mutex.inner, True) &*& <T>.own(t, mutex.data);
+    sys::locks::SysMutex(mutex.inner, True) &*& <T>.own(t, std::cell::UnsafeCell_inner(mutex.data));
 
 lem Mutex_drop<T>()
     req Mutex_own::<T>()(?t, ?mutex);
-    ens sys::locks::Mutex_own(t, mutex.inner) &*& <T>.own(t, mutex.data);
+    ens sys::locks::Mutex_own(t, mutex.inner) &*& std::cell::UnsafeCell_own::<T>(t, mutex.data);
 {
     open Mutex_own::<T>()(t, mutex);
     sys::locks::SysMutex_to_own(t);
+    close std::cell::UnsafeCell_own::<T>(t, mutex.data);
 }
 
 pred_ctor Mutex_fbc_inner<T>(l: *Mutex<T>)(;) = (*l).inner |-> ?inner &*& sys::locks::SysMutex(inner, True) &*& struct_Mutex_padding(l);
@@ -58,11 +59,12 @@ lem Mutex_share_full<T>(k: lifetime_t, t: thread_id_t, l: *Mutex<T>)
     produce_lem_ptr_chunk implies(sep(Mutex_fbc_inner(l), <T>.full_borrow_content(t0, &(*l).data)), Mutex_full_borrow_content(t, l))() {
         open sep(Mutex_fbc_inner(l), <T>.full_borrow_content(t0, &(*l).data))();
         open Mutex_fbc_inner::<T>(l)();
-        open_full_borrow_content::<T>(t0, &(*l).data);
+        open_full_borrow_content::<T>(t0, &(*l).data as *T);
+        std::cell::close_points_to_UnsafeCell(&(*l).data);
         close Mutex_data(l, _);
         assert (*l).inner |-> ?inner &*& (*l).data |-> ?data;
         ghost_rec_perm_top_weaken(type_depth(typeid(T)));
-        Send::send(t0, t, data);
+        Send::send(t0, t, std::cell::UnsafeCell_inner(data));
         ghost_rec_perm_top_unweaken();
         close Mutex_own::<T>()(t, Mutex::<T> { inner, data });
         close Mutex_full_borrow_content::<T>(t, l)();
@@ -74,9 +76,10 @@ lem Mutex_share_full<T>(k: lifetime_t, t: thread_id_t, l: *Mutex<T>)
             close Mutex_fbc_inner::<T>(l)();
             open Mutex_data(l, _);
             ghost_rec_perm_top_weaken(type_depth(typeid(T)));
-            Send::send(t, t0, data);
+            Send::send(t, t0, std::cell::UnsafeCell_inner(data));
             ghost_rec_perm_top_unweaken();
-            close_full_borrow_content::<T>(t0, &(*l).data);
+            std::cell::open_points_to_UnsafeCell(&(*l).data);
+            close_full_borrow_content::<T>(t0, &(*l).data as *T);
             close sep(Mutex_fbc_inner(l), <T>.full_borrow_content(t0, &(*l).data))();
         }{
             full_borrow_implies(k, Mutex_full_borrow_content(t, l), sep(Mutex_fbc_inner(l), <T>.full_borrow_content(t0, &(*l).data)));
@@ -119,7 +122,7 @@ lem Mutex_send<T>(t1: thread_id_t)
     ens type_interp::<T>() &*& Mutex_own(t1, mutex);
 {
     open Mutex_own::<T>()(t, mutex);
-    Send::send::<T>(t, t1, mutex.data);
+    Send::send::<T>(t, t1, std::cell::UnsafeCell_inner(mutex.data));
     close Mutex_own::<T>()(t1, mutex);
 }
 
@@ -220,9 +223,9 @@ impl<'b, T: Send> DerefMut for MutexGuard<'b, T> {
         //@ lifetime_token_trade('a, qa/2, kmlong);
         //@ assert [?qkml]lifetime_token(kmlong);
         //@ open_full_borrow(qkml, kmlong, <T>.full_borrow_content(t0, &(*lock).data));
-        //@ open_full_borrow_content::<T>(t0, &(*lock).data);
-        //@ points_to_limits(&(*lock).data);
-        //@ close_full_borrow_content::<T>(t0, &(*lock).data);
+        //@ open_full_borrow_content::<T>(t0, &(*lock).data as *T);
+        //@ points_to_limits(&(*lock).data as *T);
+        //@ close_full_borrow_content::<T>(t0, &(*lock).data as *T);
         //@ close_full_borrow(<T>.full_borrow_content(t0, &(*lock).data));
         //@ lifetime_token_trade_back(qkml, kmlong);
         let r = unsafe { &mut *(*self.lock).data.get() };
@@ -253,20 +256,20 @@ impl<'b, T: Send> DerefMut for MutexGuard<'b, T> {
         //@ leak full_borrow(kstrong, _);
         /*@
         produce_lem_ptr_chunk implies(<T>.full_borrow_content(t0, &(*lock).data), <T>.full_borrow_content(t, &(*lock).data))() {
-            open_full_borrow_content(t0, &(*lock).data);
+            open_full_borrow_content(t0, &(*lock).data as *T);
             ghost_rec_perm_top_weaken(type_depth(typeid(T)));
-            assert *(&(*lock).data) |-> ?data;
+            assert *(&(*lock).data as *T) |-> ?data;
             Send::send(t0, t, data);
             ghost_rec_perm_top_unweaken();
-            close_full_borrow_content(t, &(*lock).data);
+            close_full_borrow_content(t, &(*lock).data as *T);
         } {
             produce_lem_ptr_chunk implies(<T>.full_borrow_content(t, &(*lock).data), <T>.full_borrow_content(t0, &(*lock).data))() {
-                open_full_borrow_content(t, &(*lock).data);
+                open_full_borrow_content(t, &(*lock).data as *T);
                 ghost_rec_perm_top_weaken(type_depth(typeid(T)));
-                assert *(&(*lock).data) |-> ?data;
+                assert *(&(*lock).data as *T) |-> ?data;
                 Send::send(t, t0, data);
                 ghost_rec_perm_top_unweaken();
-                close_full_borrow_content(t0, &(*lock).data);
+                close_full_borrow_content(t0, &(*lock).data as *T);
             } {
                 full_borrow_implies('a, <T>.full_borrow_content(t0, &(*lock).data), <T>.full_borrow_content(t, &(*lock).data));
             }

@@ -917,7 +917,7 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
     match kind with
     | StructKind -> (
         match def_path with
-        | "std::cell::UnsafeCell" | "std::mem::ManuallyDrop" ->
+        | "std::mem::ManuallyDrop" ->
             let [ arg_cpn ] = substs_cpn in
             let* (Mir.GenArgType arg_ty) = translate_generic_arg arg_cpn loc in
             Ok arg_ty
@@ -2151,8 +2151,6 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
                             (AssignExpr (fn_loc, Deref (fn_loc, dst), src));
                         ],
                       mk_unit_expr fn_loc )
-              | "std::cell::UnsafeCell::<T>::new"
-              | "std::cell::UnsafeCell::<T>::get"
               | "std::mem::ManuallyDrop::<T>::new"
               | "std::mem::ManuallyDrop::deref"
               | "std::mem::ManuallyDrop::deref_mut" ->

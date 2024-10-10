@@ -1405,14 +1405,24 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
               let own tid l =
                 let* ptee_fbc = ptee_fbc tid l in
                 Ok
-                  (CallExpr
+                  (Sep
                      ( loc,
-                       "full_borrow",
-                       (*type arguments*) [],
-                       (*indices*) [],
-                       (*arguments*)
-                       [ LitPat lft; LitPat ptee_fbc ],
-                       Static ))
+                       CallExpr
+                         ( loc,
+                           "full_borrow",
+                           (*type arguments*) [],
+                           (*indices*) [],
+                           (*arguments*)
+                           [ LitPat lft; LitPat ptee_fbc ],
+                           Static ),
+                       Operation
+                         ( loc,
+                           Eq,
+                           [
+                             CallExpr
+                               (loc, "ref_origin", [], [], [ LitPat l ], Static);
+                             l;
+                           ] ) ))
               in
               let shr lft tid l =
                 Error

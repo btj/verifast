@@ -15,6 +15,10 @@ lem_auto(ptr_provenance_max_addr(ref_origin_provenance(prov))) ref_origin_max_ad
     req true;
     ens ptr_provenance_max_addr(ref_origin_provenance(prov)) == ptr_provenance_max_addr(prov);
 
+lem_auto(ref_origin(ref_origin(p))) ref_origin_ref_origin(p: *_);
+    req true;
+    ens ref_origin(ref_origin(p)) == ref_origin(p);
+
 pred ref_init_perm<T>(p: *T; x: *T);
 
 lem_auto ref_init_perm_inv<T>();

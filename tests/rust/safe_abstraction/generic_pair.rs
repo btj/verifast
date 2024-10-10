@@ -132,7 +132,7 @@ lem Pair_split_full_borrow<A, B>(k: lifetime_t, t: thread_id_t, l: *Pair<A, B>) 
 }
 
 lem Pair_share_full<A, B>(k: lifetime_t, t: thread_id_t, l: *Pair<A, B>)
-    req atomic_mask(Nlft) &*& type_interp::<A>() &*& type_interp::<B>() &*& full_borrow(k, Pair_full_borrow_content::<A, B>(t, l)) &*& [?q]lifetime_token(k);
+    req atomic_mask(Nlft) &*& type_interp::<A>() &*& type_interp::<B>() &*& full_borrow(k, Pair_full_borrow_content::<A, B>(t, l)) &*& [?q]lifetime_token(k) &*& ref_origin(l) == l;
     ens atomic_mask(Nlft) &*& type_interp::<A>() &*& type_interp::<B>() &*& [_]Pair_share::<A, B>(k, t, l) &*& [q]lifetime_token(k);
 {
     Pair_split_full_borrow_m(k, t, l);
@@ -140,6 +140,37 @@ lem Pair_share_full<A, B>(k: lifetime_t, t: thread_id_t, l: *Pair<A, B>)
     share_full_borrow_m::<B>(k, t, &(*l).snd);
     close Pair_share::<A, B>(k, t, l);
     leak Pair_share(k, t, l);
+}
+
+lem init_ref_Pair<A, B>(p: *Pair<A, B>)
+    req type_interp::<A>() &*& type_interp::<B>() &*& atomic_mask(Nlft) &*& ref_init_perm(p, ?x) &*& [_]Pair_share(?k, ?t, x) &*& [?q]lifetime_token(k);
+    ens type_interp::<A>() &*& type_interp::<B>() &*& atomic_mask(Nlft) &*& [q]lifetime_token(k) &*& [_]Pair_share(k, t, p) &*& [_]frac_borrow(k, ref_initialized_(p));
+{
+    open Pair_share::<A, B>(k, t, x);
+    open_ref_init_perm(p);
+    init_ref_share(k, t, &(*p).fst);
+    init_ref_share(k, t, &(*p).snd);
+    note(pointer_within_limits(ref_origin(&(*p).snd)));
+    close Pair_share::<A, B>(k, t, p);
+    leak Pair_share(k, t, p);
+    frac_borrow_sep(k, ref_initialized_(&(*p).fst), ref_initialized_(&(*p).snd));
+    produce_lem_ptr_chunk implies_frac(sep_(ref_initialized_(&(*p).fst), ref_initialized_(&(*p).snd)), ref_initialized_(p))() {
+        open [?f]sep_(ref_initialized_(&(*p).fst), ref_initialized_(&(*p).snd))();
+        open ref_initialized_::<A>(&(*p).fst)();
+        open ref_initialized_::<B>(&(*p).snd)();
+        close_ref_initialized(p);
+        close [f]ref_initialized_::<Pair<A, B>>(p)();
+    } {
+        produce_lem_ptr_chunk implies_frac(ref_initialized_(p), sep_(ref_initialized_(&(*p).fst), ref_initialized_(&(*p).snd)))() {
+            open [?f]ref_initialized_::<Pair<A, B>>(p)();
+            open_ref_initialized(p);
+            close [f]ref_initialized_::<A>(&(*p).fst)();
+            close [f]ref_initialized_::<B>(&(*p).snd)();
+            close [f]sep_(ref_initialized_(&(*p).fst), ref_initialized_(&(*p).snd))();
+        } {
+            frac_borrow_implies(k, sep_(ref_initialized_(&(*p).fst), ref_initialized_(&(*p).snd)), ref_initialized_(p));
+        }
+    }
 }
 
 lem Pair_sync<A, B>(t1: thread_id_t)

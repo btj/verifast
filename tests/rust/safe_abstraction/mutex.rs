@@ -208,10 +208,10 @@ impl<'b, T: Send> DerefMut for MutexGuard<'b, T> {
     req
         is_Send(typeid(T)) == true &*&
         thread_token(?t) &*& [?qa]lifetime_token('a) &*& [?qb]lifetime_token('b)
-        &*& full_borrow('a, MutexGuard_full_borrow_content::<'b, T>(t, self))
+        &*& full_borrow('a, MutexGuard_full_borrow_content::<'b, T>(t, self)) &*& ref_origin(self) == self
         &*& lifetime_inclusion('a, 'b) == true;
     @*/
-    //@ ens thread_token(t) &*& [qa]lifetime_token('a) &*& [qb]lifetime_token('b) &*& full_borrow('a, <T>.full_borrow_content(t, result));
+    //@ ens thread_token(t) &*& [qa]lifetime_token('a) &*& [qb]lifetime_token('b) &*& full_borrow('a, <T>.full_borrow_content(t, result)) &*& ref_origin(result) == result;
     {
         //@ let kstrong = open_full_borrow_strong('a, MutexGuard_full_borrow_content::<'b, T>(t, self), qa/2);
         //@ open MutexGuard_full_borrow_content::<'b, T>(t, self)();

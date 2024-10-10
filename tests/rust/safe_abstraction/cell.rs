@@ -69,6 +69,22 @@ lem Cell_share_full<T>(k: lifetime_t, t: thread_id_t, l: *Cell<T>)
   close Cell_share::<T>()(k, t, l);
   leak Cell_share::<T>()(k, t, l);
 }
+
+lem init_ref_Cell<T>(p: *Cell<T>, x: *Cell<T>)
+    req atomic_mask(Nlft) &*& [_]Cell_share(?k, ?t, x) &*& [?q]lifetime_token(k) &*& ref_init_perm(p, x);
+    ens atomic_mask(Nlft) &*& [q]lifetime_token(k) &*& [_]Cell_share(k, t, p) &*& [_]frac_borrow(k, ref_initialized_(p));
+{
+    open_ref_init_perm(p);
+    open Cell_share::<T>(k, t, x);
+    close Cell_share::<T>(k, t, p);
+    leak Cell_share::<T>(k, t, p);
+    close_ref_initialized(p);
+    close ref_initialized_::<Cell<T>>(p)();
+    borrow_m(k, ref_initialized_(p));
+    full_borrow_into_frac_m(k, ref_initialized_(p));
+    leak borrow_end_token(_, _);
+}
+
 @*/
 
 impl<T> Cell<T> {

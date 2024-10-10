@@ -287,6 +287,14 @@ lem frac_borrow_lft_incl(k: lifetime_t, q: real, k1: lifetime_t);
     req [_]frac_borrow(k, lifetime_token_(q, k1));
     ens lifetime_inclusion(k, k1) == true;
 
+// Not in lifetime logic; TODO: check soundness!
+
+pred_ctor sep_(P: pred(;), Q: pred(;))(;) = P() &*& Q();
+
+lem frac_borrow_sep(k: lifetime_t, P: pred(;), Q: pred(;));
+    req [_]frac_borrow(k, P) &*& [_]frac_borrow(k, Q);
+    ens [_]frac_borrow(k, sep_(P, Q));
+
 // Mask preserving view shifts - mask aware versions. See the documentation about Iris view shifts in general.h
 // LftL-incl
 lem lifetime_token_trade_m(k: lifetime_t, q: real, k1: lifetime_t);

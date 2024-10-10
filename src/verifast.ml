@@ -648,6 +648,29 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         in
         cont (chunks @ h) env
       end
+    | ExprStmt (CallExpr (l, "open_ref_initialized", targs, [], args, Static)) when language = CLang ->
+      require_pure();
+      let e = match (targs, args) with ([], [LitPat e]) -> e | _ -> static_error l "open_ref_initialized expects no type arguments and one argument." None in
+      let (w, tp) = check_expr (pn,ilist) tparams tenv e in
+      eval_h h env w $. fun h env pointerTerm ->
+      let (pointeeType, sn, targs) = match tp with PtrType (StructType (sn, targs) as pointeeType) | RustRefType (_, _, (StructType (sn, targs) as pointeeType)) -> (pointeeType, sn, targs) | _ -> static_error l "The argument of open_ref_initialized must be a pointer to a struct." None in
+      consume_chunk rules h env ghostenv [] [] l (ref_initialized_symb (), true) [pointeeType] real_unit dummypat (Some 1) [TermPat pointerTerm] $. fun _ h coef _ _ _ _ _ ->
+      let (_, tparams, body_opt, padding_predsymb_opt, structTypeidFunc) = List.assoc sn structmap in
+      let tpenv = List.combine tparams targs in
+      begin match body_opt with
+        None -> static_error l "Cannot open this struct: its body is not visible" None
+      | Some (_, fds, _) ->
+        let chunks =
+          fds |> flatmap @@ fun (f, (_, Real, tp_f, Some offsetFunc, _)) ->
+            let tp_f = instantiate_type tpenv tp_f in
+            match tp_f with
+              StructType ("std::cell::UnsafeCell", _) -> []
+            | _ ->
+              let fieldPointerTerm = mk_field_ptr_ l env pointerTerm targs structTypeidFunc offsetFunc in
+              [Chunk ((ref_initialized_symb (), true), [tp_f], coef, [fieldPointerTerm], None)]
+        in
+        cont (chunks @ h) env
+      end
     | ExprStmt (CallExpr (l, "close_ref_initialized", targs, [], args, Static)) when language = CLang ->
       require_pure();
       let e = match (targs, args) with ([], [LitPat e]) -> e | _ -> static_error l "close_ref_initialized expects no type arguments and one argument." None in
@@ -659,19 +682,21 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       begin match body_opt with
         None -> static_error l "Cannot close this struct: its body is not visible" None
       | Some (_, fds, _) ->
-        let rec consume_field_chunks h = function
+        let rec consume_field_chunks h coef = function
           [] ->
-          cont (Chunk ((ref_initialized_symb (), true), [pointeeType], real_unit, [pointerTerm], None)::h) env
+          let coef = match coef with None -> real_unit | Some coef -> coef in
+          cont (Chunk ((ref_initialized_symb (), true), [pointeeType], coef, [pointerTerm], None)::h) env
         | (f, (_, Real, tp_f, Some offsetFunc, _))::fds ->
           let tp_f = instantiate_type tpenv tp_f in
           match tp_f with
-            StructType ("std::cell::UnsafeCell", _) -> consume_field_chunks h fds
+            StructType ("std::cell::UnsafeCell", _) -> consume_field_chunks h coef fds
           | _ ->
             let fieldPointerTerm = mk_field_ptr_ l env pointerTerm targs structTypeidFunc offsetFunc in
-            consume_chunk rules h env ghostenv [] [] l (ref_initialized_symb (), true) [tp_f] real_unit real_unit_pat (Some 1) [TermPat fieldPointerTerm] $. fun _ h _ _ _ _ _ _ ->
-            consume_field_chunks h fds
+            let coef_pat = match coef with None -> dummypat | Some coef -> TermPat coef in
+            consume_chunk rules h env ghostenv [] [] l (ref_initialized_symb (), true) [tp_f] real_unit coef_pat (Some 1) [TermPat fieldPointerTerm] $. fun _ h coef _ _ _ _ _ ->
+            consume_field_chunks h (Some coef) fds
         in
-        consume_field_chunks h fds
+        consume_field_chunks h None fds
       end
     | ExprStmt (CallExpr (l, ("close_struct" | "close_struct_zero" as name), targs, [], args, Static)) when language = CLang ->
       require_pure ();

@@ -179,12 +179,16 @@ lem share_mono<T>(k: lifetime_t, k1: lifetime_t, t: thread_id_t, l: *T);
 
 lem share_full_borrow<T>(k: lifetime_t, t: thread_id_t, l: *_);
     nonghost_callers_only
-    req full_borrow(k, (<T>.full_borrow_content)(t, l)) &*& [?q]lifetime_token(k);
+    req full_borrow(k, (<T>.full_borrow_content)(t, l)) &*& [?q]lifetime_token(k) &*& ref_origin(l) == l;
     ens [_](<T>.share)(k, t, l) &*& [q]lifetime_token(k);
 
 lem share_full_borrow_m<T>(k: lifetime_t, t: thread_id_t, l: *_);
-    req type_interp::<T>() &*& atomic_mask(?mask) &*& mask_le(Nlft, mask) == true &*& full_borrow(k, (<T>.full_borrow_content)(t, l)) &*& [?q]lifetime_token(k);
+    req type_interp::<T>() &*& atomic_mask(?mask) &*& mask_le(Nlft, mask) == true &*& full_borrow(k, (<T>.full_borrow_content)(t, l)) &*& [?q]lifetime_token(k) &*& ref_origin(l) == l;
     ens type_interp::<T>() &*& atomic_mask(mask) &*& [_](<T>.share)(k, t, l) &*& [q]lifetime_token(k);
+
+lem init_ref_share<T>(k: lifetime_t, t: thread_id_t, p: *T);
+    req type_interp::<T>() &*& atomic_mask(?mask) &*& mask_le(Nlft, mask) == true &*& ref_init_perm(p, ?x) &*& [_](<T>.share)(k, t, x) &*& [?q]lifetime_token(k);
+    ens type_interp::<T>() &*& atomic_mask(mask) &*& [q]lifetime_token(k) &*& [_](<T>.share)(k, t, p) &*& [_]frac_borrow(k, ref_initialized_(p));
 
 fix is_Send(type_id: *_) -> bool;
 

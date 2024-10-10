@@ -84,6 +84,19 @@ pred Nodes<T>(n: *Node<T>, prev: *Node<T>, last: *Node<T>, next: *Node<T>; nodes
         nodes == cons(n, nodes0)
     };
 
+lem Nodes_is_ref_mut<T>()
+    req Nodes::<T>(?n, ?prev, ?last, ?next, ?nodes);
+    ens Nodes::<T>(n, prev, last, next, nodes) &*& forall(nodes, is_ref_mut) == true;
+{
+    open Nodes(n, prev, last, next, nodes);
+    if n == next {
+    } else {
+        std::alloc::alloc_block_ref_origin(n as *u8);
+        Nodes_is_ref_mut::<T>();
+    }
+    close Nodes(n, prev, last, next, nodes);
+}
+
 lem Nodes_split_last<T>(n: *Node<T>)
     req Nodes(n, ?prev, ?last, ?next, ?nodes) &*& 1 <= length(nodes);
     ens
@@ -178,8 +191,10 @@ pred_ctor elems_fbc<T>(t: thread_id_t, nodes: list<*Node<T>>)() =
 
 pred True(;) = true;
 
+fix is_ref_mut(p: *_) -> bool { ref_origin(p) == p }
+
 lem elems_share_full<T>(t: thread_id_t, nodes: list<*Node<T>>)
-    req type_interp::<T>() &*& atomic_mask(Nlft) &*& full_borrow(?k, elems_fbc(t, nodes)) &*& [?q]lifetime_token(k);
+    req type_interp::<T>() &*& atomic_mask(Nlft) &*& full_borrow(?k, elems_fbc(t, nodes)) &*& [?q]lifetime_token(k) &*& forall(nodes, is_ref_mut) == true;
     ens type_interp::<T>() &*& atomic_mask(Nlft) &*& foreach(nodes, elem_share::<T>(k, t)) &*& [q]lifetime_token(k);
 {
     match nodes {
@@ -223,14 +238,16 @@ lem elems_share_full<T>(t: thread_id_t, nodes: list<*Node<T>>)
 }
 
 lem Deque_share_full<T>(k: lifetime_t, t: thread_id_t, l: *Deque<T>)
-    req type_interp::<T>() &*& atomic_mask(Nlft) &*& full_borrow(k, Deque_full_borrow_content(t, l)) &*& [?q]lifetime_token(k);
+    req type_interp::<T>() &*& atomic_mask(Nlft) &*& full_borrow(k, Deque_full_borrow_content(t, l)) &*& [?q]lifetime_token(k) &*& ref_origin(l) == l;
     ens type_interp::<T>() &*& atomic_mask(Nlft) &*& [_]Deque_share(k, t, l) &*& [q]lifetime_token(k);
 {
     let klong = open_full_borrow_strong_m(k, Deque_full_borrow_content(t, l), q);
     open Deque_full_borrow_content::<T>(t, l)();
     open Deque_own::<T>()(t, ?deque);
     open Deque_(deque.sentinel, _);
-    assert Deque__(deque.sentinel, ?nodes);
+    open Deque__(deque.sentinel, ?nodes);
+    Nodes_is_ref_mut::<T>();
+    close Deque__(deque.sentinel, nodes);
     produce_lem_ptr_chunk full_borrow_convert_strong(True, sep(Deque_frac_borrow_content(nodes, t, l), elems_fbc(t, nodes)), klong, Deque_full_borrow_content(t, l))() {
         open sep(Deque_frac_borrow_content(nodes, t, l), elems_fbc(t, nodes))();
         open Deque_frac_borrow_content::<T>(nodes, t, l)();

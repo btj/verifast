@@ -151,6 +151,10 @@ mod alloc {
         req [?f]alloc_block(ptr, ?layout);
         ens [f]alloc_block(ptr, layout) &*& (ptr as usize) % Layout::align_(layout) == 0;
     
+    lem alloc_block_ref_origin(ptr: *mut u8);
+        req [?f]alloc_block(ptr, ?layout);
+        ens [f]alloc_block(ptr, layout) &*& ref_origin(ptr) == ptr;
+    
     @*/
 
     fn alloc(layout: Layout) -> *u8;

@@ -217,7 +217,7 @@ impl Tree {
     }
 
     unsafe fn accept0<'a, V: TreeVisitor>(mut x: *mut Node, mut x_is_new: bool, visitor: &'a mut V)
-    //@ req Tree(?root, 0, ?rootShape) &*& x == root &*& x_is_new &*& thread_token(?t) &*& [?q]lifetime_token(?k) &*& full_borrow(k, <V>.full_borrow_content(t, visitor));
+    //@ req Tree(?root, 0, ?rootShape) &*& x == root &*& x_is_new &*& thread_token(?t) &*& [?q]lifetime_token(?k) &*& full_borrow(k, <V>.full_borrow_content(t, visitor)) &*& ref_origin(visitor) == visitor;
     //@ ens Tree(root, 0, rootShape) &*& thread_token(t) &*& [q]lifetime_token(k) &*& full_borrow(k, <V>.full_borrow_content(t, visitor));
     {
         //@ Tree_inv();

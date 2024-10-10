@@ -38,7 +38,7 @@ mod cell {
         
         fn get<'a>(self: &'a UnsafeCell<T>) -> *mut T;
         //@ req true;
-        //@ ens result == self as *T;
+        //@ ens result == ref_origin(self) as *T;
 
     }
         
@@ -157,6 +157,7 @@ mod alloc {
     //@ req 1 <= Layout::size_(layout);
     /*@
     ens
+        ref_origin(result) == result &*&
         if result == 0 {
             true
         } else {

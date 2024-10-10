@@ -32,7 +32,7 @@ pred_ctor Cell_nonatomic_borrow_content<T>(l: *Cell<T>, t: thread_id_t)() =
 
 // `SHR` for Cell<u32>
 pred<T> <Cell<T>>.share(k, t, l) =
-  [_]nonatomic_borrow(k, t, MaskNshrSingle(l), Cell_nonatomic_borrow_content(l, t));
+  [_]nonatomic_borrow(k, t, MaskNshrSingle(ref_origin(l)), Cell_nonatomic_borrow_content(ref_origin(l), t));
 
 // Proof obligations
 lem Cell_share_mono<T>(k: lifetime_t, k1: lifetime_t, t: thread_id_t, l: *Cell<T>)
@@ -41,13 +41,13 @@ lem Cell_share_mono<T>(k: lifetime_t, k1: lifetime_t, t: thread_id_t, l: *Cell<T
 {
   open Cell_share::<T>()(k, t, l);
   assert [_]nonatomic_borrow(k, t, ?m, _);
-  nonatomic_borrow_mono(k, k1, t, m, Cell_nonatomic_borrow_content(l, t));
+  nonatomic_borrow_mono(k, k1, t, m, Cell_nonatomic_borrow_content(ref_origin(l), t));
   close Cell_share::<T>()(k1, t, l);
   leak Cell_share::<T>()(k1, t, l);
 }
 
 lem Cell_share_full<T>(k: lifetime_t, t: thread_id_t, l: *Cell<T>)
-  req atomic_mask(Nlft) &*& full_borrow(k, Cell_full_borrow_content(t, l)) &*& [?q]lifetime_token(k);
+  req atomic_mask(Nlft) &*& full_borrow(k, Cell_full_borrow_content(t, l)) &*& [?q]lifetime_token(k) &*& ref_origin(l) == l;
   ens atomic_mask(Nlft) &*& [_]Cell_share::<T>(k, t, l) &*& [q]lifetime_token(k);
 {
   produce_lem_ptr_chunk implies(Cell_full_borrow_content(t, l), Cell_nonatomic_borrow_content(l, t))() {
@@ -84,15 +84,15 @@ impl<T> Cell<T> {
     fn replace<'a>(&'a self, v: T) -> T {
         unsafe {
             //@ open Cell_share::<T>()('a, _t, self);
-            //@ assert [_]nonatomic_borrow('a, _t, ?mask, Cell_nonatomic_borrow_content(self, _t));
+            //@ assert [_]nonatomic_borrow('a, _t, ?mask, Cell_nonatomic_borrow_content(ref_origin(self), _t));
             //@ open thread_token(_t);
             //@ thread_token_split(_t, MaskTop, mask);
             //@ open_nonatomic_borrow('a, _t, mask, _q_a);
-            //@ open Cell_nonatomic_borrow_content::<T>(self, _t)();
+            //@ open Cell_nonatomic_borrow_content::<T>(ref_origin(self), _t)();
             let result = std::ptr::read(self.v.get());
             std::ptr::write(self.v.get(), v);
             //@ assert partial_thread_token(_t, ?mask0);
-            //@ close Cell_nonatomic_borrow_content::<T>(self, _t)();
+            //@ close Cell_nonatomic_borrow_content::<T>(ref_origin(self), _t)();
             //@ close_nonatomic_borrow();
             //@ thread_token_merge(_t, mask0, mask);
             //@ close thread_token(_t);
@@ -106,15 +106,15 @@ impl<T> Cell<T> {
         if self as *const Cell<T> == other as *const Cell<T> {
             return;
         }
-        //@ assert [_]nonatomic_borrow('a, _t, ?ms, Cell_nonatomic_borrow_content(self, _t));
-        //@ assert [_]nonatomic_borrow('a, _t, ?mo, Cell_nonatomic_borrow_content(other, _t));
+        //@ assert [_]nonatomic_borrow('a, _t, ?ms, Cell_nonatomic_borrow_content(ref_origin(self), _t));
+        //@ assert [_]nonatomic_borrow('a, _t, ?mo, Cell_nonatomic_borrow_content(ref_origin(other), _t));
         //@ open thread_token(_t);
         //@ thread_token_split(_t, MaskTop, ms);
         //@ thread_token_split(_t, mask_diff(MaskTop, ms), mo);
         //@ open_nonatomic_borrow('a, _t, ms, _q_a/2);
-        //@ open Cell_nonatomic_borrow_content::<T>(self, _t)();
+        //@ open Cell_nonatomic_borrow_content::<T>(ref_origin(self), _t)();
         //@ open_nonatomic_borrow('a, _t, mo, _q_a/2);
-        //@ open Cell_nonatomic_borrow_content::<T>(other, _t)();
+        //@ open Cell_nonatomic_borrow_content::<T>(ref_origin(other), _t)();
         let ps = self.v.get();
         let po = other.v.get();
         unsafe {
@@ -122,8 +122,8 @@ impl<T> Cell<T> {
             std::ptr::write(po, std::ptr::read(ps));
             std::ptr::write(ps, tmp);
         }
-        //@ close Cell_nonatomic_borrow_content::<T>(other, _t)();
-        //@ close Cell_nonatomic_borrow_content::<T>(self, _t)();
+        //@ close Cell_nonatomic_borrow_content::<T>(ref_origin(other), _t)();
+        //@ close Cell_nonatomic_borrow_content::<T>(ref_origin(self), _t)();
         //@ assert partial_thread_token(_t, ?rem);
         //@ close_nonatomic_borrow();
         //@ close_nonatomic_borrow();

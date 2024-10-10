@@ -3007,6 +3007,16 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             cont h env (if op = Eq then true_term else false_term)
           end
           begin fun () ->
+            let v1 =
+              match dialect with
+                Some Rust -> mk_app (ref_origin_symb ()) [v1]
+              | _ -> v1
+            in
+            let v2 =
+              match dialect with
+                Some Rust -> mk_app (ref_origin_symb ()) [v2]
+              | _ -> v2
+            in
             assume (ctxt#mk_not (ctxt#mk_eq v1 v2)) $. fun () ->
             cont h env (if op = Eq then false_term else true_term)
           end

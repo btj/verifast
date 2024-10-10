@@ -4306,8 +4306,23 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
             None
         in
         let pre =
-          add_type_interp_asns adt_def_loc tparams
-            (add_send_asns adt_def_loc send_tparams pre)
+          Ast.Sep
+            ( adt_def_loc,
+              Ast.Operation
+                ( adt_def_loc,
+                  Eq,
+                  [
+                    CallExpr
+                      ( adt_def_loc,
+                        "ref_origin",
+                        [],
+                        [],
+                        [ LitPat (Var (adt_def_loc, "l")) ],
+                        Static );
+                    Var (adt_def_loc, "l");
+                  ] ),
+              add_type_interp_asns adt_def_loc tparams
+                (add_send_asns adt_def_loc send_tparams pre) )
         in
         let share_pred =
           CoefAsn

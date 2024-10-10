@@ -3,7 +3,7 @@
 use std::{cell::UnsafeCell, process::abort, ptr::NonNull};
 
 struct RcBox<T> {
-    strong: UnsafeCell<usize>,
+    strong: UnsafeCell<usize>, // The std implementation uses Cell<usize> here. Why not just use usize?
     // weak: UnsafeCell<usize>,
     value: T,
 }
@@ -32,7 +32,7 @@ inductive wrap<t> = wrap(t);
 
 pred<T> <Rc<T>>.own(t, rc) =
     wrap::<*RcBox<T>>(std::ptr::NonNull_ptr(rc.ptr)) == wrap(?ptr) &*&
-    ptr as usize != 0 &*&
+    ptr as usize != 0 &*& ref_origin(ptr) == ptr &*&
     [_]exists(?dk) &*& [_]exists(?gid) &*& [_]na_inv(t, MaskNshrSingle(ptr), rc_na_inv(dk, gid, ptr, t)) &*&
     ticket(dlft_pred(dk), gid, ?frac) &*& [frac]dlft_pred(dk)(gid, false) &*&
     [_](<T>.share(dk, t, &(*ptr).value)) &*&
@@ -44,7 +44,7 @@ pred_ctor ticket_(dk: lifetime_t, gid: usize, frac: real)(;) = ticket(dlft_pred(
 
 pred<T> <Rc<T>>.share(k, t, l) =
     [_]exists(?nnp) &*& [_]frac_borrow(k, Rc_frac_bc(l, nnp)) &*&
-    wrap::<*RcBox<T>>(std::ptr::NonNull_ptr(nnp)) == wrap(?ptr) &*& ptr as usize != 0 &*&
+    wrap::<*RcBox<T>>(std::ptr::NonNull_ptr(nnp)) == wrap(?ptr) &*& ptr as usize != 0 &*& ref_origin(ptr) == ptr &*&
     [_]exists(?dk) &*& [_]exists(?gid) &*& [_]na_inv(t, MaskNshrSingle(ptr), rc_na_inv(dk, gid, ptr, t)) &*&
     [_]exists(?frac) &*& [_]frac_borrow(k, ticket_(dk, gid, frac)) &*& [_]frac_borrow(k, lifetime_token_(frac, dk)) &*&
     [_](<T>.share(dk, t, &(*ptr).value)) &*&
@@ -71,7 +71,7 @@ lem Rc_fbor_split<T>(t: thread_id_t, l: *Rc<T>) -> std::ptr::NonNull<RcBox<T>> /
     req atomic_mask(?m) &*& mask_le(Nlft, m) == true &*&
         full_borrow(?k, Rc_full_borrow_content::<T>(t, l)) &*& [?q]lifetime_token(k);
     ens atomic_mask(m) &*&
-        full_borrow(k, Rc_frac_bc(l, result)) &*& std::ptr::NonNull_ptr(result) as usize != 0 &*&
+        full_borrow(k, Rc_frac_bc(l, result)) &*& std::ptr::NonNull_ptr(result) as usize != 0 &*& ref_origin(std::ptr::NonNull_ptr(result)) == std::ptr::NonNull_ptr(result) &*&
         [_]exists(?dk) &*& [_]exists(?gid) &*&
         [_]na_inv(t, MaskNshrSingle(std::ptr::NonNull_ptr(result)), rc_na_inv(dk, gid, std::ptr::NonNull_ptr(result), t)) &*&
         [_]exists(?frac) &*& full_borrow(k, ticket_(dk, gid, frac)) &*& full_borrow(k, lifetime_token_(frac, dk)) &*&

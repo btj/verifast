@@ -1,0 +1,28 @@
+// See https://github.com/btj/vf-rust-aliasing/tree/master/README.md
+// VeriFast aims to soundly (but not necessarily completely) enforce the Tree Borrows aliasing restrictions model by Neven Villani and Ralf Jung.
+// The current design is highly incomplete (e.g., it does not support two-phase borrows).
+
+/*@
+
+fix ref_origin_provenance(prov: pointer_provenance) -> pointer_provenance;
+fix ref_origin<t>(p: *t) -> *t { pointer_ctor(ref_origin_provenance((p as pointer).provenance), (p as pointer).address) as *t }
+
+lem_auto(ptr_provenance_min_addr(ref_origin_provenance(prov))) ref_origin_min_addr(prov: pointer_provenance);
+    req true;
+    ens ptr_provenance_min_addr(ref_origin_provenance(prov)) == ptr_provenance_min_addr(prov);
+
+lem_auto(ptr_provenance_max_addr(ref_origin_provenance(prov))) ref_origin_max_addr(prov: pointer_provenance);
+    req true;
+    ens ptr_provenance_max_addr(ref_origin_provenance(prov)) == ptr_provenance_max_addr(prov);
+
+pred ref_init_perm<T>(p: *T; x: *T);
+
+lem_auto ref_init_perm_inv<T>();
+    req ref_init_perm::<T>(?p, ?x);
+    ens ref_init_perm::<T>(p, x) &*& ref_origin(p) == ref_origin(x);
+
+pred ref_initialized<T>(p: *T;);
+
+pred_ctor ref_initialized_<T>(p: *T)(;) = ref_initialized(p);
+
+@*/

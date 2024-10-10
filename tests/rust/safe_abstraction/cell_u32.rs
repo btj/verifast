@@ -28,11 +28,11 @@ i.e. in VeriFast the `[[u32]].OWN` is implicitly persistent.
 */
 
 pred_ctor CellU32_nonatomic_borrow_content(l: *CellU32, t: thread_id_t)(;) =
-  *(&(*l).v as *u32) |-> ?v &*& struct_CellU32_padding(l);
+  *(&(*l).v as *u32) |-> ?v;
 
 // `SHR` for Cell<u32>
 pred <CellU32>.share(k, t, l) =
-  [_]nonatomic_borrow(k, t, MaskNshrSingle(l), CellU32_nonatomic_borrow_content(l, t));
+  [_]nonatomic_borrow(k, t, MaskNshrSingle(ref_origin(l)), CellU32_nonatomic_borrow_content(ref_origin(l), t));
 
 // Proof obligations
 lem CellU32_share_mono(k: lifetime_t, k1: lifetime_t, t: thread_id_t, l: *CellU32)
@@ -41,13 +41,13 @@ lem CellU32_share_mono(k: lifetime_t, k1: lifetime_t, t: thread_id_t, l: *CellU3
 {
   open CellU32_share(k, t, l);
   assert [_]nonatomic_borrow(k, t, ?m, _);
-  nonatomic_borrow_mono(k, k1, t, m, CellU32_nonatomic_borrow_content(l, t));
+  nonatomic_borrow_mono(k, k1, t, m, CellU32_nonatomic_borrow_content(ref_origin(l), t));
   close CellU32_share(k1, t, l);
   leak CellU32_share(k1, t, l);
 }
 
 lem CellU32_share_full(k: lifetime_t, t: thread_id_t, l: *CellU32)
-  req atomic_mask(Nlft) &*& full_borrow(k, CellU32_full_borrow_content(t, l)) &*& [?q]lifetime_token(k);
+  req atomic_mask(Nlft) &*& full_borrow(k, CellU32_full_borrow_content(t, l)) &*& [?q]lifetime_token(k) &*& ref_origin(l) == l;
   ens atomic_mask(Nlft) &*& [_]CellU32_share(k, t, l) &*& [q]lifetime_token(k);
 {
   produce_lem_ptr_chunk implies(CellU32_full_borrow_content(t, l), CellU32_nonatomic_borrow_content(l, t))() {
@@ -67,6 +67,22 @@ lem CellU32_share_full(k: lifetime_t, t: thread_id_t, l: *CellU32)
   close CellU32_share(k, t, l);
   leak CellU32_share(k, t, l);
 }
+
+lem init_ref_CellU32(p: *CellU32, x: *CellU32)
+    req atomic_mask(Nlft) &*& [_]CellU32_share(?k, ?t, x) &*& [?q]lifetime_token(k) &*& ref_init_perm(p, x);
+    ens atomic_mask(Nlft) &*& [q]lifetime_token(k) &*& [_]CellU32_share(k, t, p) &*& [_]frac_borrow(k, ref_initialized_(p));
+{
+    open_ref_init_perm(p);
+    open CellU32_share(k, t, x);
+    close CellU32_share(k, t, p);
+    leak CellU32_share(k, t, p);
+    close_ref_initialized(p);
+    close ref_initialized_::<CellU32>(p)();
+    borrow_m(k, ref_initialized_(p));
+    full_borrow_into_frac_m(k, ref_initialized_(p));
+    leak borrow_end_token(_, _);
+}
+
 @*/
 
 impl CellU32 {
@@ -118,8 +134,8 @@ impl CellU32 {
         if self as *const CellU32 == other as *const CellU32 {
             return;
         }
-        //@ assert [_]nonatomic_borrow('a, _t, ?ms, CellU32_nonatomic_borrow_content(self, _t));
-        //@ assert [_]nonatomic_borrow('a, _t, ?mo, CellU32_nonatomic_borrow_content(other, _t));
+        //@ assert [_]nonatomic_borrow('a, _t, ?ms, CellU32_nonatomic_borrow_content(ref_origin(self), _t));
+        //@ assert [_]nonatomic_borrow('a, _t, ?mo, CellU32_nonatomic_borrow_content(ref_origin(other), _t));
         //@ open thread_token(_t);
         //@ thread_token_split(_t, MaskTop, ms);
         //@ thread_token_split(_t, mask_diff(MaskTop, ms), mo);

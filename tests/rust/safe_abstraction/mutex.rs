@@ -33,7 +33,7 @@ pred_ctor Mutex_fbc_inner<T>(l: *Mutex<T>)(;) = (*l).inner |-> ?inner &*& sys::l
 fix t0() -> thread_id_t { default_value }
 
 pred_ctor Mutex_frac_borrow_content<T>(kfcc: lifetime_t, l: *Mutex<T>)(;) =
-    sys::locks::SysMutex_share(&(*l).inner, full_borrow_(kfcc, <T>.full_borrow_content(t0, &(*l).data))) &*& struct_Mutex_padding(l);
+    sys::locks::SysMutex_share(&(*l).inner, full_borrow_(kfcc, <T>.full_borrow_content(t0, ref_origin(&(*l).data)))) &*& struct_Mutex_padding(l);
 
 pred<T> <Mutex<T>>.share(k, t, l) =
     exists_np(?kfcc) &*& lifetime_inclusion(k, kfcc) == true &*& frac_borrow(k, Mutex_frac_borrow_content::<T>(kfcc, l));
@@ -53,7 +53,7 @@ lem Mutex_share_mono<T>(k: lifetime_t, k1: lifetime_t, t: thread_id_t, l: *Mutex
 }
 
 lem Mutex_share_full<T>(k: lifetime_t, t: thread_id_t, l: *Mutex<T>)
-    req is_Send(typeid(T)) == true &*& type_interp::<T>() &*& atomic_mask(Nlft) &*& full_borrow(k, Mutex_full_borrow_content(t, l)) &*& [?q]lifetime_token(k);
+    req is_Send(typeid(T)) == true &*& type_interp::<T>() &*& atomic_mask(Nlft) &*& full_borrow(k, Mutex_full_borrow_content(t, l)) &*& [?q]lifetime_token(k) &*& ref_origin(l) == l;
     ens type_interp::<T>() &*& atomic_mask(Nlft) &*& [_]Mutex_share(k, t, l) &*& [q]lifetime_token(k);
 {
     produce_lem_ptr_chunk implies(sep(Mutex_fbc_inner(l), <T>.full_borrow_content(t0, &(*l).data)), Mutex_full_borrow_content(t, l))() {
@@ -139,13 +139,13 @@ pub struct MutexGuard<'a, T: Send> {
 // TODO: Is this extra lifetime `klong` necessary here?
 pred<'a, T> <MutexGuard<'a, T>>.own(t, mutexGuard) =
     [_]exists_np(?klong) &*& lifetime_inclusion('a, klong) == true &*& [_]frac_borrow('a, Mutex_frac_borrow_content(klong, mutexGuard.lock))
-    &*& sys::locks::SysMutex_locked(&(*mutexGuard.lock).inner, full_borrow_(klong, <T>.full_borrow_content(t0, &(*mutexGuard.lock).data)), t)
-    &*& full_borrow(klong, <T>.full_borrow_content(t0, &(*mutexGuard.lock).data));
+    &*& sys::locks::SysMutex_locked(&(*mutexGuard.lock).inner, full_borrow_(klong, <T>.full_borrow_content(t0, ref_origin(&(*mutexGuard.lock).data))), t)
+    &*& full_borrow(klong, <T>.full_borrow_content(t0, ref_origin(&(*mutexGuard.lock).data)));
 
 pred_ctor MutexGuard_fbc_rest<'a, T>(klong: lifetime_t, t: thread_id_t, l: *MutexGuard<'a, T>, lock: *Mutex<T>)() =
     (*l).lock |-> lock &*& lifetime_inclusion('a, klong) == true &*& struct_MutexGuard_padding(l)
     &*& [_]frac_borrow('a, Mutex_frac_borrow_content(klong, lock))
-    &*& sys::locks::SysMutex_locked(&(*lock).inner, full_borrow_(klong, <T>.full_borrow_content(t0, &(*lock).data)), t);
+    &*& sys::locks::SysMutex_locked(&(*lock).inner, full_borrow_(klong, <T>.full_borrow_content(t0, ref_origin(&(*lock).data))), t);
 
 @*/
 
@@ -222,56 +222,57 @@ impl<'b, T: Send> DerefMut for MutexGuard<'b, T> {
         //@ lifetime_inclusion_trans('a, 'b, kmlong);
         //@ lifetime_token_trade('a, qa/2, kmlong);
         //@ assert [?qkml]lifetime_token(kmlong);
-        //@ open_full_borrow(qkml, kmlong, <T>.full_borrow_content(t0, &(*lock).data));
-        //@ open_full_borrow_content::<T>(t0, &(*lock).data as *T);
-        //@ points_to_limits(&(*lock).data as *T);
-        //@ close_full_borrow_content::<T>(t0, &(*lock).data as *T);
-        //@ close_full_borrow(<T>.full_borrow_content(t0, &(*lock).data));
+        //@ let data_ptr = ref_origin(&(*lock).data) as *T;
+        //@ open_full_borrow(qkml, kmlong, <T>.full_borrow_content(t0, data_ptr));
+        //@ open_full_borrow_content::<T>(t0, data_ptr);
+        //@ points_to_limits(data_ptr);
+        //@ close_full_borrow_content::<T>(t0, data_ptr);
+        //@ close_full_borrow(<T>.full_borrow_content(t0, data_ptr));
         //@ lifetime_token_trade_back(qkml, kmlong);
         let r = unsafe { &mut *(*self.lock).data.get() };
         /*@
         produce_lem_ptr_chunk full_borrow_convert_strong(True,
-            sep(MutexGuard_fbc_rest::<'b, T>(kmlong, t, self, lock), full_borrow_(kmlong, <T>.full_borrow_content(t0, &(*lock).data))),
+            sep(MutexGuard_fbc_rest::<'b, T>(kmlong, t, self, lock), full_borrow_(kmlong, <T>.full_borrow_content(t0, data_ptr))),
             kstrong,
             MutexGuard_full_borrow_content::<'b, T>(t, self))() {
-                open sep(MutexGuard_fbc_rest::<'b, T>(kmlong, t, self, lock), full_borrow_(kmlong, <T>.full_borrow_content(t0, &(*lock).data)))();
+                open sep(MutexGuard_fbc_rest::<'b, T>(kmlong, t, self, lock), full_borrow_(kmlong, <T>.full_borrow_content(t0, data_ptr)))();
                 open MutexGuard_fbc_rest::<'b, T>(kmlong, t, self, lock)();
-                open full_borrow_(kmlong, <T>.full_borrow_content(t0, &(*lock).data))();
+                open full_borrow_(kmlong, <T>.full_borrow_content(t0, data_ptr))();
                 close exists_np(kmlong); leak exists_np(kmlong);
                 close MutexGuard_own::<'b, T>(t, mutexGuard);
                 close MutexGuard_full_borrow_content::<'b, T>(t, self)();
             }{
                 close MutexGuard_fbc_rest::<'b, T>(kmlong, t, self, lock)();
-                close full_borrow_(kmlong, <T>.full_borrow_content(t0, &(*lock).data))();
-                close sep(MutexGuard_fbc_rest::<'b, T>(kmlong, t, self, lock), full_borrow_(kmlong, <T>.full_borrow_content(t0, &(*lock).data)))();
+                close full_borrow_(kmlong, <T>.full_borrow_content(t0, data_ptr))();
+                close sep(MutexGuard_fbc_rest::<'b, T>(kmlong, t, self, lock), full_borrow_(kmlong, <T>.full_borrow_content(t0, data_ptr)))();
                 close_full_borrow_strong(kstrong, MutexGuard_full_borrow_content::<'b, T>(t, self),
-                    sep(MutexGuard_fbc_rest::<'b, T>(kmlong, t, self, lock), full_borrow_(kmlong, <T>.full_borrow_content(t0, &(*lock).data))));
+                    sep(MutexGuard_fbc_rest::<'b, T>(kmlong, t, self, lock), full_borrow_(kmlong, <T>.full_borrow_content(t0, data_ptr))));
                 full_borrow_split(kstrong, MutexGuard_fbc_rest::<'b, T>(kmlong, t, self, lock),
-                    full_borrow_(kmlong, <T>.full_borrow_content(t0, &(*lock).data)));
-                full_borrow_unnest(kstrong, kmlong, <T>.full_borrow_content(t0, &(*lock).data));
+                    full_borrow_(kmlong, <T>.full_borrow_content(t0, data_ptr)));
+                full_borrow_unnest(kstrong, kmlong, <T>.full_borrow_content(t0, data_ptr));
                 lifetime_inclusion_glb('a, kstrong, kmlong);
-                full_borrow_mono(lifetime_intersection(kstrong, kmlong), 'a, <T>.full_borrow_content(t0, &(*lock).data));
+                full_borrow_mono(lifetime_intersection(kstrong, kmlong), 'a, <T>.full_borrow_content(t0, data_ptr));
             }
         @*/
         //@ leak full_borrow(kstrong, _);
         /*@
-        produce_lem_ptr_chunk implies(<T>.full_borrow_content(t0, &(*lock).data), <T>.full_borrow_content(t, &(*lock).data))() {
-            open_full_borrow_content(t0, &(*lock).data as *T);
+        produce_lem_ptr_chunk implies(<T>.full_borrow_content(t0, data_ptr), <T>.full_borrow_content(t, data_ptr))() {
+            open_full_borrow_content(t0, data_ptr);
             ghost_rec_perm_top_weaken(type_depth(typeid(T)));
-            assert *(&(*lock).data as *T) |-> ?data;
+            assert *data_ptr |-> ?data;
             Send::send(t0, t, data);
             ghost_rec_perm_top_unweaken();
-            close_full_borrow_content(t, &(*lock).data as *T);
+            close_full_borrow_content(t, data_ptr);
         } {
-            produce_lem_ptr_chunk implies(<T>.full_borrow_content(t, &(*lock).data), <T>.full_borrow_content(t0, &(*lock).data))() {
-                open_full_borrow_content(t, &(*lock).data as *T);
+            produce_lem_ptr_chunk implies(<T>.full_borrow_content(t, data_ptr), <T>.full_borrow_content(t0, data_ptr))() {
+                open_full_borrow_content(t, data_ptr);
                 ghost_rec_perm_top_weaken(type_depth(typeid(T)));
-                assert *(&(*lock).data as *T) |-> ?data;
+                assert *data_ptr |-> ?data;
                 Send::send(t, t0, data);
                 ghost_rec_perm_top_unweaken();
-                close_full_borrow_content(t0, &(*lock).data as *T);
+                close_full_borrow_content(t0, data_ptr);
             } {
-                full_borrow_implies('a, <T>.full_borrow_content(t0, &(*lock).data), <T>.full_borrow_content(t, &(*lock).data));
+                full_borrow_implies('a, <T>.full_borrow_content(t0, data_ptr), <T>.full_borrow_content(t, data_ptr));
             }
         }
         @*/

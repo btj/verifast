@@ -79,7 +79,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   let fno_strict_aliasing = Vfbindings.get Vfparam_fno_strict_aliasing vfbindings || dialect = Some Rust
   let assume_left_to_right_evaluation = Vfbindings.get Vfparam_assume_left_to_right_evaluation vfbindings
   let assume_no_provenance = Vfbindings.get Vfparam_assume_no_provenance vfbindings
-  let assume_no_subobject_provenance = Vfbindings.get Vfparam_assume_no_subobject_provenance vfbindings
+  let assume_no_subobject_provenance = Vfbindings.get Vfparam_assume_no_subobject_provenance vfbindings || dialect = Some Rust
   let include_paths = Vfbindings.get Vfparam_include_paths vfbindings
   let option_allow_undeclared_struct_types = Vfbindings.get Vfparam_allow_undeclared_struct_types vfbindings
   let data_model = Vfbindings.get Vfparam_data_model vfbindings
@@ -5888,6 +5888,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       Java -> fun () -> int_zero_term
     | _ -> fun () -> snd (null_pointer_symb ())
   let has_type_symb = lazy_purefuncsymb "has_type"
+  let ref_origin_symb = lazy_purefuncsymb "ref_origin"
 
   let mk_ptr_add p off = mk_app (ptr_add_symb ()) [p; off]
   let rec mk_ptr_add_ l env p off elemType =
@@ -5961,7 +5962,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     ctxt#assume_forall "field_ptr_eq_ptr_add" [fp] [ctxt#type_inductive; ctxt#type_inductive; ctxt#type_int] eq
     end;
 
-    begin
+    if List.mem_assoc "union_variant_ptr" purefuncmap then begin
     ctxt#begin_formal;
     let p = ctxt#mk_bound 0 ctxt#type_inductive in
     let tid = ctxt#mk_bound 1 ctxt#type_inductive in
@@ -6030,6 +6031,8 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
 
   let generic_points_to__symb = lazy_predfamsymb (if dialect = Some Rust then "points_to_" else "generic_points_to_")
   let generic_points_to_symb = lazy_predfamsymb (if dialect = Some Rust then "points_to" else "generic_points_to")
+  let ref_init_perm_symb = lazy_predfamsymb "ref_init_perm"
+  let ref_initialized_symb = lazy_predfamsymb "ref_initialized"
   let array__symb = lazy_predfamsymb "array_"
   let array_symb = lazy_predfamsymb "array"
 
@@ -6715,8 +6718,17 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     flatmap
       begin
         function
-          (sn, (_, tparams, Some (_, fmap, _), _, _)) ->
+          (sn, (lsn, tparams, Some (_, fmap, _), padding_symb_opt, _)) ->
           let targs = tparams_as_targs tparams in
+          begin match padding_symb_opt, fmap with
+          | Some symb, [_] ->
+            (* Single-field structs have no padding *)
+            [("struct_" ^ sn ^ "_padding", []),
+             ([], lsn, tparams, [sn, PtrType (StructType (sn, targs))], symb, Some 1,
+              EmpAsn lsn)]
+          | _ -> []
+          end
+          @
           flatmap
             begin
               function

@@ -20,12 +20,17 @@ lem_auto(ref_origin(ref_origin(p))) ref_origin_ref_origin(p: *_);
     ens ref_origin(ref_origin(p)) == ref_origin(p);
 
 pred ref_init_perm<T>(p: *T; x: *T);
+pred ref_padding_init_perm<T>(p: *T; x: *T);
 
 lem_auto ref_init_perm_inv<T>();
     req ref_init_perm::<T>(?p, ?x);
     ens ref_init_perm::<T>(p, x) &*& ref_origin(p) == ref_origin(x);
 
+pred ref_end_token<T>(p: *T; x: *T, frac: real);
+pred ref_padding_end_token<T>(p: *T; x: *T, frac: real);
+
 pred ref_initialized<T>(p: *T;);
+pred ref_padding_initialized<T>(p: *T;);
 
 pred_ctor ref_initialized_<T>(p: *T)(;) = ref_initialized(p);
 

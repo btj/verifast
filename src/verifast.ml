@@ -624,6 +624,41 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       with_context (Executing (h, env, l, "Consuming object")) $. fun () ->
       consume_c_object_core_core l real_unit_pat pointerTerm pointeeType h env true false $. fun _ h (Some value) ->
       cont (Chunk ((generic_points_to_symb (), true), [pointeeType], real_unit, [pointerTerm; value], None)::h) env
+    | ExprStmt (CallExpr (l, "init_ref_padding", targs, [], args, Static)) when language = CLang ->
+      require_pure();
+      let e = match (targs, args) with ([], [LitPat e]) -> e | _ -> static_error l "init_ref_padding expects no type arguments and one argument." None in
+      let (w, tp) = check_expr (pn,ilist) tparams tenv e in
+      eval_h h env w $. fun h env pointerTerm ->
+      let (pointeeType, sn, targs) = match tp with PtrType (StructType (sn, targs) as pointeeType) | RustRefType (_, _, (StructType (sn, targs) as pointeeType)) -> (pointeeType, sn, targs) | _ -> static_error l "The argument of init_ref_padding must be a pointer to a struct." None in
+      consume_chunk rules h env ghostenv [] [] l (ref_padding_init_perm_symb (), true) [pointeeType] real_unit real_unit_pat (Some 1) [TermPat pointerTerm; SrcPat DummyPat] $. fun _ h _ [_; originalPointerTerm] _ _ _ _ ->
+      let (_, tparams, body_opt, padding_predsymb_opt, structTypeidFunc) = List.assoc sn structmap in
+      begin match padding_predsymb_opt with
+        None -> static_error l "This struct does not have padding" None
+      | Some padding_predsymb ->
+        consume_chunk rules h env ghostenv [] [] l (padding_predsymb, true) targs real_unit dummypat (Some 1) [TermPat originalPointerTerm] $. fun _ h coef _ _ _ _ _ ->
+        let h =
+          Chunk ((padding_predsymb, true), targs, coef, [pointerTerm], None)::
+          Chunk ((ref_padding_initialized_symb (), true), [pointeeType], real_unit, [pointerTerm], None)::
+          Chunk ((ref_padding_end_token_symb (), true), [pointeeType], real_unit, [pointerTerm; originalPointerTerm; coef], None)::
+          h
+        in
+        cont h env
+      end
+    | ExprStmt (CallExpr (l, "end_ref_padding", targs, [], args, Static)) when language = CLang ->
+      require_pure();
+      let e = match (targs, args) with ([], [LitPat e]) -> e | _ -> static_error l "init_ref_padding expects no type arguments and one argument." None in
+      let (w, tp) = check_expr (pn,ilist) tparams tenv e in
+      eval_h h env w $. fun h env pointerTerm ->
+      let (pointeeType, sn, targs) = match tp with PtrType (StructType (sn, targs) as pointeeType) | RustRefType (_, _, (StructType (sn, targs) as pointeeType)) -> (pointeeType, sn, targs) | _ -> static_error l "The argument of init_ref_padding must be a pointer to a struct." None in
+      consume_chunk rules h env ghostenv [] [] l (ref_padding_initialized_symb (), true) [pointeeType] real_unit real_unit_pat (Some 1) [TermPat pointerTerm] $. fun _ h _ _ _ _ _ _ ->
+      consume_chunk rules h env ghostenv [] [] l (ref_padding_end_token_symb (), true) [pointeeType] real_unit real_unit_pat (Some 1) [TermPat pointerTerm; dummypat; dummypat] $. fun _ h _ [_; originalPointerTerm; coef] _ _ _ _ ->
+      let (_, tparams, body_opt, padding_predsymb_opt, structTypeidFunc) = List.assoc sn structmap in
+      begin match padding_predsymb_opt with
+        None -> static_error l "This struct does not have padding" None
+      | Some padding_predsymb ->
+        consume_chunk rules h env ghostenv [] [] l (padding_predsymb, true) targs real_unit (TermPat coef) (Some 1) [TermPat pointerTerm] $. fun _ h _ _ _ _ _ _ ->
+        cont (Chunk ((padding_predsymb, true), targs, coef, [originalPointerTerm], None)::h) env
+      end
     | ExprStmt (CallExpr (l, "open_ref_init_perm", targs, [], args, Static)) when language = CLang ->
       require_pure();
       let e = match (targs, args) with ([], [LitPat e]) -> e | _ -> static_error l "open_ref_init_perm expects no type arguments and one argument." None in
@@ -631,7 +666,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       eval_h h env w $. fun h env pointerTerm ->
       let (pointeeType, sn, targs) = match tp with PtrType (StructType (sn, targs) as pointeeType) | RustRefType (_, _, (StructType (sn, targs) as pointeeType)) -> (pointeeType, sn, targs) | _ -> static_error l "The argument of open_ref_init_perm must be a pointer to a struct." None in
       consume_chunk rules h env ghostenv [] [] l (ref_init_perm_symb (), true) [pointeeType] real_unit real_unit_pat (Some 1) [TermPat pointerTerm; SrcPat DummyPat] $. fun _ h _ [_; originalPointerTerm] _ _ _ _ ->
-        let (_, tparams, body_opt, padding_predsymb_opt, structTypeidFunc) = List.assoc sn structmap in
+      let (_, tparams, body_opt, padding_predsymb_opt, structTypeidFunc) = List.assoc sn structmap in
       let tpenv = List.combine tparams targs in
       begin match body_opt with
         None -> static_error l "Cannot open this struct: its body is not visible" None
@@ -645,6 +680,13 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
               let fieldPointerTerm = mk_field_ptr_ l env pointerTerm targs structTypeidFunc offsetFunc in
               let originalFieldPointerTerm = mk_field_ptr_ l env originalPointerTerm targs structTypeidFunc offsetFunc in
               [Chunk ((ref_init_perm_symb (), true), [tp_f], real_unit, [fieldPointerTerm; originalFieldPointerTerm], None)]
+        in
+        let chunks =
+          match padding_predsymb_opt, fds with
+            None, _ -> chunks
+          | Some _, [_] -> chunks (* Single-field structs have empty padding *)
+          | Some padding_predsymb, _ ->
+            Chunk ((ref_padding_init_perm_symb (), true), [pointeeType], real_unit, [pointerTerm; originalPointerTerm], None)::chunks
         in
         cont (chunks @ h) env
       end
@@ -669,6 +711,13 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
               let fieldPointerTerm = mk_field_ptr_ l env pointerTerm targs structTypeidFunc offsetFunc in
               [Chunk ((ref_initialized_symb (), true), [tp_f], coef, [fieldPointerTerm], None)]
         in
+        let chunks =
+          match padding_predsymb_opt, fds with
+            None, _ -> chunks
+          | Some _, [_] -> chunks (* Single-field structs have empty padding *)
+          | Some padding_predsymb, _ ->
+            Chunk ((ref_padding_initialized_symb (), true), [pointeeType], coef, [pointerTerm], None)::chunks
+        in
         cont (chunks @ h) env
       end
     | ExprStmt (CallExpr (l, "close_ref_initialized", targs, [], args, Static)) when language = CLang ->
@@ -684,8 +733,18 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       | Some (_, fds, _) ->
         let rec consume_field_chunks h coef = function
           [] ->
-          let coef = match coef with None -> real_unit | Some coef -> coef in
-          cont (Chunk ((ref_initialized_symb (), true), [pointeeType], coef, [pointerTerm], None)::h) env
+          let cont h coef =
+            let coef = match coef with None -> real_unit | Some coef -> coef in
+            cont (Chunk ((ref_initialized_symb (), true), [pointeeType], coef, [pointerTerm], None)::h) env
+          in
+          begin match padding_predsymb_opt, fds with
+            None, _ -> cont h coef
+          | Some _, [_] -> cont h coef (* Single-field structs have empty padding *)
+          | Some padding_predsymb, _ ->
+            let coef_pat = match coef with None -> dummypat | Some coef -> TermPat coef in
+            consume_chunk rules h env ghostenv [] [] l (ref_padding_initialized_symb (), true) [pointeeType] real_unit coef_pat (Some 1) [TermPat pointerTerm] $. fun _ h coef _ _ _ _ _ ->
+            cont h (Some coef)
+          end
         | (f, (_, Real, tp_f, Some offsetFunc, _))::fds ->
           let tp_f = instantiate_type tpenv tp_f in
           match tp_f with

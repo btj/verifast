@@ -6032,7 +6032,11 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   let generic_points_to__symb = lazy_predfamsymb (if dialect = Some Rust then "points_to_" else "generic_points_to_")
   let generic_points_to_symb = lazy_predfamsymb (if dialect = Some Rust then "points_to" else "generic_points_to")
   let ref_init_perm_symb = lazy_predfamsymb "ref_init_perm"
+  let ref_padding_init_perm_symb = lazy_predfamsymb "ref_padding_init_perm"
   let ref_initialized_symb = lazy_predfamsymb "ref_initialized"
+  let ref_padding_initialized_symb = lazy_predfamsymb "ref_padding_initialized"
+  let ref_end_token_symb = lazy_predfamsymb "ref_end_token"
+  let ref_padding_end_token_symb = lazy_predfamsymb "ref_padding_end_token"
   let array__symb = lazy_predfamsymb "array_"
   let array_symb = lazy_predfamsymb "array"
 

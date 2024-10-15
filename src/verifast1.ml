@@ -472,7 +472,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | ArrayType t -> ProverInt
     | StaticArrayType (t, s) -> ProverInductive
     | PtrType _ | RustRefType (_, _, _) -> ProverInductive
-    | FuncType _ | InlineFuncType _ -> ProverInt
+    | FuncType _ | InlineFuncType _ -> ProverInductive
     | PredType (tparams, ts, inputParamCount, _) -> ProverInductive
     | PureFuncType _ -> ProverInductive
     | BoxIdType -> ProverInt

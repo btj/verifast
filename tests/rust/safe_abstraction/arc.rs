@@ -102,6 +102,37 @@ lem Arc_share_full<T>(k: lifetime_t, t: thread_id_t, l: *Arc<T>)
     leak Arc_share(k, t, l);
 }
 
+pred_ctor init_ref_Arc_Ctx<T>(fr: real, p: *Arc<T>, l: *Arc<T>)() =
+    ref_end_token(&(*p).ptr, &(*l).ptr, fr/2) &*&
+    [fr/2](*l).ptr |-> ?_;
+
+lem init_ref_Arc<T>()
+    req atomic_mask(Nlft) &*& [_]Arc_share::<T>(?k, ?t, ?l) &*& ref_init_perm::<Arc<T>>(?p, l) &*& [?q]lifetime_token(k);
+    ens atomic_mask(Nlft) &*& [_]Arc_share::<T>(k, t, p) &*& [_]frac_borrow(k, ref_initialized_(p)) &*& [q]lifetime_token(k);
+{
+    open [?f]Arc_share::<T>(k, t, l);
+    assert [_]exists::<std::ptr::NonNull<ArcInner<T>>>(?nnp);
+    init_ref_helper1(Arc_frac_bc(l, nnp), q);
+    open [?fr]Arc_frac_bc::<T>(l, nnp)();
+    open_ref_init_perm(p);
+    std::ptr::init_ref_NonNull(&(*p).ptr, 1/2);
+    close_ref_initialized(p);
+    produce_lem_ptr_chunk init_ref_helper_premise<Arc<T>>(init_ref_Arc_Ctx(fr, p, l), fr, Arc_frac_bc(p, nnp), p, Arc_frac_bc(l, nnp))() {
+        open init_ref_Arc_Ctx::<T>(fr, p, l)();
+        open Arc_frac_bc::<T>(p, nnp)();
+        open_ref_initialized(p);
+        std::ptr::end_ref_NonNull(&(*p).ptr);
+        close [fr]Arc_frac_bc::<T>(l, nnp)();
+    } {
+        close init_ref_Arc_Ctx::<T>(fr, p, l)();
+        close [fr/2]Arc_frac_bc::<T>(p, nnp)();
+        init_ref_helper2::<Arc<T>>();
+    }
+    close Arc_share::<T>(k, t, p);
+    leak Arc_share(k, t, p);
+}
+
+
 @*/
 
 unsafe impl<T: Sync + Send> Send for Arc<T> {}

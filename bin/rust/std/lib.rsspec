@@ -86,9 +86,21 @@ mod ptr {
     //@ ens thread_token(t) &*& *to_drop |-> _;
 
     struct NonNull<T>;
+    
     /*@
+    
     pred_ctor NonNull_own<T>()(t: thread_id_t, v: NonNull<T>;) = NonNull_ptr(v) as usize != 0;
+    
     fix NonNull_ptr<_T>(v: NonNull<_T>) -> *_T;
+    
+    lem init_ref_NonNull<T>(p: *NonNull<T>, coef: real);
+        req ref_init_perm::<NonNull<T>>(p, ?x) &*& [?f](*x |-> ?v) &*& 0 < coef &*& coef < 1;
+        ens [coef*f](*p |-> v) &*& [f - coef*f](*x |-> v) &*& ref_initialized::<NonNull<T>>(p) &*& ref_end_token::<NonNull<T>>(p, x, coef*f);
+    
+    lem end_ref_NonNull<T>(p: *NonNull<T>);
+        req ref_initialized::<NonNull<T>>(p) &*& ref_end_token::<NonNull<T>>(p, ?x, ?f) &*& [f](*p |-> ?v);
+        ens [f](*x |-> v);
+    
     @*/
 
     impl<T> NonNull<T> {

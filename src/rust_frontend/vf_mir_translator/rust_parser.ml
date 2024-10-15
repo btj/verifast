@@ -475,12 +475,16 @@ and parse_match_stmt_arm = function%parser
   [ parse_expr as pat; (l, Kwd "=>"); parse_block_stmt as s ] -> SwitchStmtClause (l, pat, [s])
 and parse_produce_lemma_function_pointer_chunk_stmt_function_type_clause = function%parser
   [ [%let (li, ftn) = parse_simple_path];
+    [%let targs = function%parser
+       [ parse_type_args as targs ] -> targs
+     | [ ] -> []
+    ];
     (_, Kwd "("); [%let args = rep_comma parse_expr]; (_, Kwd ")");
     (_, Kwd "("); [%let params = rep_comma (function%parser [ (l, Ident x) ] -> (l, x))]; (_, Kwd ")");
     (openBraceLoc, Kwd "{");
     parse_stmts as ss;
     (closeBraceLoc, Kwd "}")
-  ] -> (ftn, [], args, params, openBraceLoc, ss, closeBraceLoc)
+  ] -> (ftn, targs, args, params, openBraceLoc, ss, closeBraceLoc)
 and parse_block_stmt = function%parser
   [ (l, Kwd "{");
     parse_stmts as ss;
@@ -667,7 +671,7 @@ let parse_ghost_decl = function%parser
      | [ ] -> false
     ]
   ] -> [FuncTypeDecl (l, Real, rt, ftn, [], ftps, ps, (pre, post, terminates))]
-| [ (l, Kwd "lem_type"); (lftn, Ident ftn); (_, Kwd "("); [%let ftps = rep_comma parse_param]; (_, Kwd ")"); (_, Kwd "=");
+| [ (l, Kwd "lem_type"); (lftn, Ident ftn); parse_type_params as tparams; (_, Kwd "("); [%let ftps = rep_comma parse_param]; (_, Kwd ")"); (_, Kwd "=");
   (_, Kwd "lem"); (_, Kwd "("); [%let ps = rep_comma parse_param]; (_, Kwd ")"); 
   [%let rt = function%parser
     [ (_, Kwd "->"); parse_type as t ] -> Some t
@@ -676,7 +680,7 @@ let parse_ghost_decl = function%parser
   (_, Kwd ";");
   (_, Kwd "req"); parse_asn as pre; (_, Kwd ";");
   (_, Kwd "ens"); parse_asn as post; (_, Kwd ";")
-] -> [FuncTypeDecl (l, Ghost, rt, ftn, [], ftps, ps, (pre, post, false))]
+] -> [FuncTypeDecl (l, Ghost, rt, ftn, tparams, ftps, ps, (pre, post, false))]
 | [ (l, Kwd "abstract_type"); (_, Ident tn); (_, Kwd ";") ] -> [AbstractTypeDecl (l, tn)]
 | [ (l, Kwd "type_pred_decl"); (_, Kwd "<"); (_, Kwd "Self"); (_, Kwd ">"); (_, Kwd "."); (_, Ident predName); (_, Kwd ":"); parse_type as te; (_, Kwd ";") ] ->
   [TypePredDecl (l, te, "Self", predName)]

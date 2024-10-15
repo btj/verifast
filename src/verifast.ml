@@ -626,20 +626,25 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       cont (Chunk ((generic_points_to_symb (), true), [pointeeType], real_unit, [pointerTerm; value], None)::h) env
     | ExprStmt (CallExpr (l, "init_ref_padding", targs, [], args, Static)) when language = CLang ->
       require_pure();
-      let e = match (targs, args) with ([], [LitPat e]) -> e | _ -> static_error l "init_ref_padding expects no type arguments and one argument." None in
-      let (w, tp) = check_expr (pn,ilist) tparams tenv e in
-      eval_h h env w $. fun h env pointerTerm ->
+      let e_ptr, e_coef = match (targs, args) with ([], [LitPat e_ptr; LitPat e_coef]) -> e_ptr, e_coef | _ -> static_error l "init_ref_padding expects no type arguments and two arguments (a pointer and a fraction)." None in
+      let (w_ptr, tp) = check_expr (pn,ilist) tparams tenv e_ptr in
+      let w_coef = check_expr_t (pn,ilist) tparams tenv e_coef RealType in
+      eval_h h env w_ptr $. fun h env pointerTerm ->
+      eval_h h env w_coef $. fun h env coef ->
+      assert_term (ctxt#mk_and (ctxt#mk_lt real_zero coef) (ctxt#mk_lt coef real_unit)) h env l "The given fraction must be positive and less than 1" None;
       let (pointeeType, sn, targs) = match tp with PtrType (StructType (sn, targs) as pointeeType) | RustRefType (_, _, (StructType (sn, targs) as pointeeType)) -> (pointeeType, sn, targs) | _ -> static_error l "The argument of init_ref_padding must be a pointer to a struct." None in
       consume_chunk rules h env ghostenv [] [] l (ref_padding_init_perm_symb (), true) [pointeeType] real_unit real_unit_pat (Some 1) [TermPat pointerTerm; SrcPat DummyPat] $. fun _ h _ [_; originalPointerTerm] _ _ _ _ ->
       let (_, tparams, body_opt, padding_predsymb_opt, structTypeidFunc) = List.assoc sn structmap in
       begin match padding_predsymb_opt with
         None -> static_error l "This struct does not have padding" None
       | Some padding_predsymb ->
-        consume_chunk rules h env ghostenv [] [] l (padding_predsymb, true) targs real_unit dummypat (Some 1) [TermPat originalPointerTerm] $. fun _ h coef _ _ _ _ _ ->
+        consume_chunk rules h env ghostenv [] [] l (padding_predsymb, true) targs real_unit dummypat (Some 1) [TermPat originalPointerTerm] $. fun _ h coef0 _ _ _ _ _ ->
+        let coef1 = ctxt#mk_mul coef coef0 in
         let h =
-          Chunk ((padding_predsymb, true), targs, coef, [pointerTerm], None)::
+          Chunk ((padding_predsymb, true), targs, coef1, [pointerTerm], None)::
+          Chunk ((padding_predsymb, true), targs, ctxt#mk_sub coef0 coef1, [originalPointerTerm], None)::
           Chunk ((ref_padding_initialized_symb (), true), [pointeeType], real_unit, [pointerTerm], None)::
-          Chunk ((ref_padding_end_token_symb (), true), [pointeeType], real_unit, [pointerTerm; originalPointerTerm; coef], None)::
+          Chunk ((ref_padding_end_token_symb (), true), [pointeeType], real_unit, [pointerTerm; originalPointerTerm; coef1], None)::
           h
         in
         cont h env
@@ -657,7 +662,51 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         None -> static_error l "This struct does not have padding" None
       | Some padding_predsymb ->
         consume_chunk rules h env ghostenv [] [] l (padding_predsymb, true) targs real_unit (TermPat coef) (Some 1) [TermPat pointerTerm] $. fun _ h _ _ _ _ _ _ ->
-        cont (Chunk ((padding_predsymb, true), targs, coef, [originalPointerTerm], None)::h) env
+        produce_chunk h (padding_predsymb, true) targs coef (Some 1) [originalPointerTerm] None $. fun h ->
+        cont h env
+      end
+    | ExprStmt (CallExpr (l, "init_ref", targs, [], args, Static)) when language = CLang ->
+      require_pure();
+      let (e_ptr, e_coef) = match (targs, args) with ([], [LitPat e_ptr; LitPat e_coef]) -> (e_ptr, e_coef) | _ -> static_error l "init_ref expects no type arguments and two arguments (a pointer and a fraction)." None in
+      let (w_ptr, tp) = check_expr (pn,ilist) tparams tenv e_ptr in
+      let w_coef = check_expr_t (pn,ilist) tparams tenv e_coef RealType in
+      eval_h h env w_ptr $. fun h env pointerTerm ->
+      eval_h h env w_coef $. fun h env coef ->
+      assert_term (ctxt#mk_and (ctxt#mk_lt real_zero coef) (ctxt#mk_lt coef real_unit)) h env l "Given fraction must be positive and less than 1" None;
+      let pointeeType = match tp with PtrType pointeeType | RustRefType (_, _, pointeeType) -> pointeeType | _ -> static_error l "The argument of init_ref must be a pointer." None in
+      begin match pointeeType with
+      | StructType (_, _) -> static_error l "init_ref on a pointer-to-struct is not supported; instead, use open_ref_init_perm and initialize each field (and the padding) separately" None
+      | InductiveType (_, _) -> static_error l "init_ref on a pointer-to-enum is not yet supported" None
+      | RustRefType (_, _, _) -> static_error l "init_ref on a pointer-to-ref is not yet supported" None
+      | _ ->
+        consume_chunk rules h env ghostenv [] [] l (ref_init_perm_symb (), true) [pointeeType] real_unit real_unit_pat (Some 1) [TermPat pointerTerm; SrcPat DummyPat] $. fun _ h _ [_; originalPointerTerm] _ _ _ _ ->
+        consume_chunk rules h env ghostenv [] [] l (generic_points_to_symb (), true) [pointeeType] real_unit (TermPat coef) (Some 1) [TermPat originalPointerTerm; SrcPat DummyPat] $. fun _ h coef0 [_; value] _ _ _ _ ->
+        let coef1 = ctxt#mk_mul coef coef0 in
+        let h =
+          Chunk ((generic_points_to_symb (), true), [pointeeType], coef1, [pointerTerm; value], None)::
+          Chunk ((generic_points_to_symb (), true), [pointeeType], ctxt#mk_sub coef0 coef1, [originalPointerTerm; value], None)::
+          Chunk ((ref_initialized_symb (), true), [pointeeType], real_unit, [pointerTerm], None)::
+          Chunk ((ref_end_token_symb (), true), [pointeeType], real_unit, [pointerTerm; originalPointerTerm; coef1], None)::
+          h
+        in
+        cont h env
+      end
+    | ExprStmt (CallExpr (l, "end_ref", targs, [], args, Static)) when language = CLang ->
+      require_pure();
+      let e = match (targs, args) with ([], [LitPat e]) -> e | _ -> static_error l "end_ref expects no type arguments and one argument." None in
+      let w, tp = check_expr (pn,ilist) tparams tenv e in
+      eval_h h env w $. fun h env pointerTerm ->
+      let pointeeType = match tp with PtrType pointeeType | RustRefType (_, _, pointeeType) -> pointeeType | _ -> static_error l "The argument of init_ref must be a pointer." None in
+      begin match pointeeType with
+      | StructType (_, _) -> static_error l "end_ref on a pointer-to-struct is not supported; instead, use open_ref_init_perm and initialize each field (and the padding) separately" None
+      | InductiveType (_, _) -> static_error l "end_ref on a pointer-to-enum is not yet supported" None
+      | RustRefType (_, _, _) -> static_error l "end_ref on a pointer-to-ref is not yet supported" None
+      | _ ->
+        consume_chunk rules h env ghostenv [] [] l (ref_end_token_symb (), true) [pointeeType] real_unit real_unit_pat (Some 1) [TermPat pointerTerm; dummypat; dummypat] $. fun _ h _ [_; originalPointerTerm; coef] _ _ _ _ ->
+        consume_chunk rules h env ghostenv [] [] l (ref_initialized_symb (), true) [pointeeType] real_unit real_unit_pat (Some 1) [TermPat pointerTerm] $. fun _ h _ _ _ _ _ _ ->
+        consume_chunk rules h env ghostenv [] [] l (generic_points_to_symb (), true) [pointeeType] real_unit (TermPat coef) (Some 1) [TermPat pointerTerm; SrcPat DummyPat] $. fun _ h _ [_; value] _ _ _ _ ->
+        produce_chunk h (generic_points_to_symb (), true) [pointeeType] coef (Some 1) [originalPointerTerm; value] None $. fun h ->
+        cont h env
       end
     | ExprStmt (CallExpr (l, "open_ref_init_perm", targs, [], args, Static)) when language = CLang ->
       require_pure();

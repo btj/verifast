@@ -121,6 +121,36 @@ lem Rc_share_full<T>(k: lifetime_t, t: thread_id_t, l: *Rc<T>)
     close [df]Rc_share::<T>(k, t, l);
 }
 
+pred_ctor init_ref_Rc_Ctx<T>(fr: real, p: *Rc<T>, l: *Rc<T>)() =
+    ref_end_token(&(*p).ptr, &(*l).ptr, fr/2) &*&
+    [fr/2](*l).ptr |-> ?_;
+
+lem init_ref_Rc<T>()
+    req atomic_mask(Nlft) &*& [_]Rc_share::<T>(?k, ?t, ?l) &*& ref_init_perm::<Rc<T>>(?p, l) &*& [?q]lifetime_token(k);
+    ens atomic_mask(Nlft) &*& [_]Rc_share::<T>(k, t, p) &*& [_]frac_borrow(k, ref_initialized_(p)) &*& [q]lifetime_token(k);
+{
+    open [?f]Rc_share::<T>(k, t, l);
+    assert [_]exists::<std::ptr::NonNull<RcBox<T>>>(?nnp);
+    init_ref_helper1(Rc_frac_bc(l, nnp), q);
+    open [?fr]Rc_frac_bc::<T>(l, nnp)();
+    open_ref_init_perm(p);
+    std::ptr::init_ref_NonNull(&(*p).ptr, 1/2);
+    close_ref_initialized(p);
+    produce_lem_ptr_chunk init_ref_helper_premise<Rc<T>>(init_ref_Rc_Ctx(fr, p, l), fr, Rc_frac_bc(p, nnp), p, Rc_frac_bc(l, nnp))() {
+        open init_ref_Rc_Ctx::<T>(fr, p, l)();
+        open Rc_frac_bc::<T>(p, nnp)();
+        open_ref_initialized(p);
+        std::ptr::end_ref_NonNull(&(*p).ptr);
+        close [fr]Rc_frac_bc::<T>(l, nnp)();
+    } {
+        close init_ref_Rc_Ctx::<T>(fr, p, l)();
+        close [fr/2]Rc_frac_bc::<T>(p, nnp)();
+        init_ref_helper2::<Rc<T>>();
+    }
+    close Rc_share::<T>(k, t, p);
+    leak Rc_share(k, t, p);
+}
+
 @*/
 
 impl<T> Rc<T> {

@@ -111,9 +111,10 @@ lem Mutex_share_full<T>(k: lifetime_t, t: thread_id_t, l: *Mutex<T>)
     }
 }
 
-pred_ctor init_ref_Mutex_Ctx<T>(fr: real, p: *Mutex<T>, x: *Mutex<T>)() =
-    sys::locks::ref_Mutex_end_token(&(*p).inner, &(*x).inner, fr) &*&
-    ref_padding_end_token(p, x, fr);
+pred_ctor init_ref_Mutex_Ctx<T>(kfcc: lifetime_t, fr: real, p: *Mutex<T>, x: *Mutex<T>)() =
+    sys::locks::ref_Mutex_end_token(&(*p).inner, &(*x).inner, fr/2) &*&
+    [fr/2]Mutex_frac_borrow_content::<T>(kfcc, x)() &*&
+    ref_padding_end_token(p, x, fr/2);
 
 lem init_ref_Mutex<T>(p: *Mutex<T>, x: *Mutex<T>)
     req atomic_mask(Nlft) &*& [_]Mutex_share(?k, ?t, x) &*& [?q]lifetime_token(k) &*& ref_init_perm(p, x);
@@ -122,36 +123,25 @@ lem init_ref_Mutex<T>(p: *Mutex<T>, x: *Mutex<T>)
     open [?f]Mutex_share::<T>(k, t, x);
     assert [f]exists_np::<lifetime_t>(?kfcc);
     open_ref_init_perm(p);
-    let k1 = open_frac_borrow_strong_m(k, Mutex_frac_borrow_content::<T>(kfcc, x), q);
+    init_ref_helper1(Mutex_frac_borrow_content::<T>(kfcc, x), q);
     open [?fr]Mutex_frac_borrow_content::<T>(kfcc, x)();
-    sys::locks::init_ref_SysMutex(&(*p).inner);
-    init_ref_padding(p);
+    sys::locks::init_ref_SysMutex(&(*p).inner, 1/2);
+    init_ref_padding(p, 1/2);
     close_ref_initialized(p);
-    close [fr]Mutex_frac_borrow_content::<T>(kfcc, p)();
-    produce_lem_ptr_chunk frac_borrow_convert_strong(init_ref_Mutex_Ctx::<T>(fr, p, x), sep(scaledp(fr, Mutex_frac_borrow_content(kfcc, p)), ref_initialized_(p)), k1, fr, Mutex_frac_borrow_content::<T>(kfcc, x))() {
-        open init_ref_Mutex_Ctx::<T>(fr, p, x)();
-        open sep(scaledp(fr, Mutex_frac_borrow_content(kfcc, p)), ref_initialized_(p))();
-        open scaledp(fr, Mutex_frac_borrow_content(kfcc, p))();
+    close [fr/2]Mutex_frac_borrow_content::<T>(kfcc, x)();
+    close [fr/2]Mutex_frac_borrow_content::<T>(kfcc, p)();
+    produce_lem_ptr_chunk init_ref_helper_premise<Mutex<T>>(init_ref_Mutex_Ctx::<T>(kfcc, fr, p, x), fr, Mutex_frac_borrow_content(kfcc, p), p, Mutex_frac_borrow_content::<T>(kfcc, x))() {
+        open init_ref_Mutex_Ctx::<T>(kfcc, fr, p, x)();
         open Mutex_frac_borrow_content::<T>(kfcc, p)();
-        open ref_initialized_::<Mutex<T>>(p)();
         open_ref_initialized(p);
         end_ref_padding(p);
         sys::locks::end_ref_SysMutex(&(*p).inner);
-        close [fr]Mutex_frac_borrow_content::<T>(kfcc, x)();
+        close [fr/2]Mutex_frac_borrow_content::<T>(kfcc, x)();
     } {
-        close init_ref_Mutex_Ctx::<T>(fr, p, x)();
-        close scaledp(fr, Mutex_frac_borrow_content(kfcc, p))();
-        close ref_initialized_::<Mutex<T>>(p)();
-        close sep(scaledp(fr, Mutex_frac_borrow_content(kfcc, p)), ref_initialized_(p))();
-        close_frac_borrow_strong_m(k1, Mutex_frac_borrow_content::<T>(kfcc, x), sep(scaledp(fr, Mutex_frac_borrow_content(kfcc, p)), ref_initialized_(p)));
+        close init_ref_Mutex_Ctx::<T>(kfcc, fr, p, x)();
+        init_ref_helper2::<Mutex<T>>();
     }
-    full_borrow_split_m(k1, scaledp(fr, Mutex_frac_borrow_content(kfcc, p)), ref_initialized_(p));
-    full_borrow_into_frac_m(k1, scaledp(fr, Mutex_frac_borrow_content(kfcc, p)));
-    frac_borrow_implies_scaled(k1, fr, Mutex_frac_borrow_content(kfcc, p));
-    frac_borrow_mono(k1, k, Mutex_frac_borrow_content(kfcc, p));
     close [f]Mutex_share::<T>(k, t, p);
-    full_borrow_into_frac_m(k1, ref_initialized_(p));
-    frac_borrow_mono(k1, k, ref_initialized_(p));
 }
 
 @*/

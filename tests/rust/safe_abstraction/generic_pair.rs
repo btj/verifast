@@ -146,7 +146,9 @@ lem Pair_share_full<A, B>(k: lifetime_t, t: thread_id_t, l: *Pair<A, B>)
 }
 
 pred_ctor ref_padding_initialized_<T>(p: *T)(;) = ref_padding_initialized(p);
-pred_ctor init_ref_Pair_Ctx<A, B>(fr: real, p: *Pair<A, B>, x: *Pair<A, B>)() = ref_padding_end_token(p, x, fr);
+pred_ctor init_ref_Pair_Ctx<A, B>(fr: real, p: *Pair<A, B>, x: *Pair<A, B>)() =
+    ref_padding_end_token(p, x, fr/2) &*&
+    [fr/2]struct_Pair_padding(x);
 
 lem init_ref_Pair<A, B>(p: *Pair<A, B>)
     req type_interp::<A>() &*& type_interp::<B>() &*& atomic_mask(Nlft) &*& ref_init_perm(p, ?x) &*& [_]Pair_share(?k, ?t, x) &*& [?q]lifetime_token(k);
@@ -158,28 +160,28 @@ lem init_ref_Pair<A, B>(p: *Pair<A, B>)
     {
         let k1 = open_frac_borrow_strong_m(k, struct_Pair_padding_(x), q);
         open [?fr]struct_Pair_padding_::<A, B>(x)();
-        init_ref_padding(p);
-        produce_lem_ptr_chunk frac_borrow_convert_strong(init_ref_Pair_Ctx::<A, B>(fr, p, x), sep(scaledp(fr, struct_Pair_padding_(p)), ref_padding_initialized_(p)), k1, fr, struct_Pair_padding_(x))() {
+        init_ref_padding(p, 1/2);
+        produce_lem_ptr_chunk frac_borrow_convert_strong(init_ref_Pair_Ctx::<A, B>(fr, p, x), sep(scaledp(fr/2, struct_Pair_padding_(p)), ref_padding_initialized_(p)), k1, fr, struct_Pair_padding_(x))() {
             open init_ref_Pair_Ctx::<A, B>(fr, p, x)();
-            open sep(scaledp(fr, struct_Pair_padding_(p)), ref_padding_initialized_(p))();
-            open scaledp(fr, struct_Pair_padding_(p))();
+            open sep(scaledp(fr/2, struct_Pair_padding_(p)), ref_padding_initialized_(p))();
+            open scaledp(fr/2, struct_Pair_padding_(p))();
             open struct_Pair_padding_::<A, B>(p)();
             open ref_padding_initialized_::<Pair<A, B>>(p)();
             end_ref_padding(p);
             close [fr]struct_Pair_padding_::<A, B>(x)();
         } {
             close init_ref_Pair_Ctx::<A, B>(fr, p, x)();
-            close [fr]struct_Pair_padding_::<A, B>(p)();
-            close scaledp(fr, struct_Pair_padding_(p))();
+            close [fr/2]struct_Pair_padding_::<A, B>(p)();
+            close scaledp(fr/2, struct_Pair_padding_(p))();
             close ref_padding_initialized_::<Pair<A, B>>(p)();
-            close sep(scaledp(fr, struct_Pair_padding_(p)), ref_padding_initialized_(p))();
-            close_frac_borrow_strong_m(k1, struct_Pair_padding_(x), sep(scaledp(fr, struct_Pair_padding_(p)), ref_padding_initialized_(p)));
+            close sep(scaledp(fr/2, struct_Pair_padding_(p)), ref_padding_initialized_(p))();
+            close_frac_borrow_strong_m(k1, struct_Pair_padding_(x), sep(scaledp(fr/2, struct_Pair_padding_(p)), ref_padding_initialized_(p)));
         }
-        full_borrow_mono(k1, k, sep(scaledp(fr, struct_Pair_padding_(p)), ref_padding_initialized_(p)));
-        full_borrow_split_m(k, scaledp(fr, struct_Pair_padding_(p)), ref_padding_initialized_(p));
-        full_borrow_into_frac_m(k, scaledp(fr, struct_Pair_padding_(p)));
+        full_borrow_mono(k1, k, sep(scaledp(fr/2, struct_Pair_padding_(p)), ref_padding_initialized_(p)));
+        full_borrow_split_m(k, scaledp(fr/2, struct_Pair_padding_(p)), ref_padding_initialized_(p));
+        full_borrow_into_frac_m(k, scaledp(fr/2, struct_Pair_padding_(p)));
         full_borrow_into_frac_m(k, ref_padding_initialized_(p));
-        frac_borrow_implies_scaled(k, fr, struct_Pair_padding_(p));
+        frac_borrow_implies_scaled(k, fr/2, struct_Pair_padding_(p));
     }
     
     init_ref_share(k, t, &(*p).fst);

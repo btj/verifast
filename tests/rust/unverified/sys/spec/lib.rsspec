@@ -16,9 +16,9 @@ mod locks {
     
     pred ref_Mutex_end_token(p: *Mutex, x: *Mutex, frac: real);
     
-    lem init_ref_SysMutex(p: *sys::locks::Mutex);
-        req ref_init_perm::<Mutex>(p, ?x) &*& [?f]SysMutex_share(x, ?P);
-        ens ref_initialized::<Mutex>(p) &*& [f]SysMutex_share(p, P) &*& ref_Mutex_end_token(p, x, f);
+    lem init_ref_SysMutex(p: *sys::locks::Mutex, coef: real);
+        req ref_init_perm::<Mutex>(p, ?x) &*& [?f]SysMutex_share(x, ?P) &*& 0 < coef &*& coef < 1;
+        ens ref_initialized::<Mutex>(p) &*& [coef*f]SysMutex_share(p, P) &*& [f - coef*f]SysMutex_share(x, P) &*& ref_Mutex_end_token(p, x, coef*f);
     
     lem end_ref_SysMutex(p: *Mutex);
         req ref_Mutex_end_token(p, ?x, ?f) &*& ref_initialized::<Mutex>(p) &*& [f]SysMutex_share(p, ?P);

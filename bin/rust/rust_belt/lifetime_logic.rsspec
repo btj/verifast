@@ -427,3 +427,58 @@ lem close_frac_borrow_strong_m(k1: lifetime_t, P: pred(;), Q: pred());
     ens atomic_mask(mask) &*& full_borrow(k1, Q) &*& [q]lifetime_token(k) &*& is_frac_borrow_convert_strong(c, Ctx, Q, k1, f, P);
 
 @*/
+
+
+// --- Helper lemmas for proving init_ref_T proof obligations
+
+/*@
+
+pred init_ref_helper_token(fr: real, q: real, k: lifetime_t, P: pred(;)) =
+    exists::<lifetime_t>(?k1) &*&
+    lifetime_inclusion(k, k1) == true &*& close_frac_borrow_token_strong(k1, P, q, k, fr);
+
+lem init_ref_helper1(P: pred(;), q: real)
+    req atomic_mask(Nlft) &*& [_]frac_borrow(?k, P) &*& [q]lifetime_token(k);
+    ens atomic_mask(Nlft) &*& [?fr]P() &*& init_ref_helper_token(fr, q, k, P);
+{
+    let k1 = open_frac_borrow_strong_m(k, P, q);
+    close exists(k1);
+    close init_ref_helper_token(_, q, k, P);
+}
+
+lem_type init_ref_helper_premise<T>(Ctx: pred(), fr: real, Q: pred(;), p: *T, P: pred(;)) = lem();
+    req Ctx() &*& [fr/2]Q() &*& ref_initialized::<T>(p);
+    ens [fr]P();
+
+pred_ctor init_ref_helper2_Ctx<T>(prem: *_, Ctx: pred(), fr: real, Q: pred(;), p: *T, P: pred(;))() =
+    is_init_ref_helper_premise(prem, Ctx, fr, Q, p, P) &*& Ctx();
+    
+lem init_ref_helper2<T>()
+    req atomic_mask(Nlft) &*& init_ref_helper_token(?fr, ?q, ?k, ?P) &*& is_init_ref_helper_premise::<T>(?prem, ?Ctx, fr, ?Q, ?p, P) &*& Ctx() &*& [fr/2]Q() &*& ref_initialized::<T>(p);
+    ens atomic_mask(Nlft) &*& [q]lifetime_token(k) &*& [_]frac_borrow(k, Q) &*& [_]frac_borrow(k, ref_initialized_::<T>(p)) &*& is_init_ref_helper_premise::<T>(prem, Ctx, fr, Q, p, P);
+{
+    open init_ref_helper_token(fr, q, k, P);
+    open exists(?k1);
+    produce_lem_ptr_chunk frac_borrow_convert_strong(init_ref_helper2_Ctx(prem, Ctx, fr, Q, p, P), sep(scaledp(fr/2, Q), ref_initialized_(p)), k1, fr, P)() {
+        open init_ref_helper2_Ctx::<T>(prem, Ctx, fr, Q, p, P)();
+        open sep(scaledp(fr/2, Q), ref_initialized_(p))();
+        open scaledp(fr/2, Q)();
+        open ref_initialized_::<T>(p)();
+        prem();
+        leak is_init_ref_helper_premise(_, _, _, _, _, _);
+    } {
+        close init_ref_helper2_Ctx::<T>(prem, Ctx, fr, Q, p, P)();
+        close scaledp(fr/2, Q)();
+        close ref_initialized_::<T>(p)();
+        close sep(scaledp(fr/2, Q), ref_initialized_(p))();
+        close_frac_borrow_strong_m(k1, P, sep(scaledp(fr/2, Q), ref_initialized_(p)));
+    }
+    full_borrow_mono(k1, k, sep(scaledp(fr/2, Q), ref_initialized_(p)));
+    full_borrow_split_m(k, scaledp(fr/2, Q), ref_initialized_(p));
+    full_borrow_into_frac_m(k, scaledp(fr/2, Q));
+    frac_borrow_implies_scaled(k, fr/2, Q);
+    full_borrow_into_frac_m(k, ref_initialized_(p));
+    assume(false); // TODO: Prove this.
+}
+
+@*/

@@ -2566,7 +2566,16 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
           let bor_kind_cpn = bor_kind_get ref_data_cpn in
           let place_cpn = place_get ref_data_cpn in
           let* place_expr = translate_place place_cpn loc in
-          let expr = Ast.AddressOf (loc, place_expr) in
+          let place_ty = decode_ty (place_ty_get ref_data_cpn) in
+          let fn_name =
+            match place_ty, BorrowKind.get bor_kind_cpn with
+              `Str, Shared -> "create_str_ref"
+            | `Slice _, Mut -> "create_slice_ref_mut"
+            | `Slice _, Shared -> "create_slice_ref"
+            | _, Mut -> "create_ref_mut"
+            | _, Shared -> "create_ref"
+          in
+          let expr = Ast.CallExpr (loc, fn_name, [], [], [LitPat (AddressOf (loc, place_expr))], Static) in
           Ok (`TrRvalueExpr expr)
           (*Todo @Nima: We might need to assert the chunk when we make a reference to it*)
       | AddressOf address_of_data_cpn ->

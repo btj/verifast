@@ -99,7 +99,7 @@ impl Buffer {
     //@ ens Buffer(buffer, size, length) &*& Buffer_(result, _, length);
     {
         let mut result = Buffer::new(if (*buffer).length == 0 { 1 } else { (*buffer).length });
-        Buffer::push_buffer(&mut result as *mut Buffer, buffer);
+        Buffer::push_buffer(std::ptr::addr_of_mut!(result), buffer);
         result
     }
 
@@ -221,23 +221,23 @@ unsafe fn handle_connection(data: *mut u8)
 
     let mut line_buffer = Buffer::new(1000);
 
-    read_line(socket, &mut line_buffer as *mut Buffer);
+    read_line(socket, std::ptr::addr_of_mut!(line_buffer));
 
     simple_mutex::SimpleMutex_acquire(mutex);
     //@ open mutex_inv(buffer)();
-    Buffer::push_buffer(buffer, &mut line_buffer as *mut Buffer);
+    Buffer::push_buffer(buffer, std::ptr::addr_of_mut!(line_buffer));
     let mut buffer_copy = Buffer::clone(buffer);
     //@ close mutex_inv(buffer)();
     simple_mutex::SimpleMutex_release(mutex);
 
-    Buffer::drop(&mut line_buffer as *mut Buffer);
+    Buffer::drop(std::ptr::addr_of_mut!(line_buffer));
 
     send_str(socket, "HTTP/1.0 200 OK\r\n\r\n");
     //@ open Buffer_(_, _, _);
     socket.send(buffer_copy.buffer, buffer_copy.length);
     socket.close();
 
-    Buffer::drop(&mut buffer_copy as *mut Buffer);
+    Buffer::drop(std::ptr::addr_of_mut!(buffer_copy));
 }
 
 unsafe fn print<'a>(text: &'a str)

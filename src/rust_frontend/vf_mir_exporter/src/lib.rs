@@ -1810,6 +1810,9 @@ mod vf_mir_builder {
                 // &x or &mut x
                 mir::Rvalue::Ref(region, bor_kind, place) => {
                     let mut ref_data_cpn = rvalue_cpn.init_ref();
+                    let place_ty = place.ty(&enc_ctx.body().local_decls, tcx);
+                    let place_ty_cpn = ref_data_cpn.reborrow().init_place_ty();
+                    Self::encode_ty(tcx, enc_ctx, place_ty.ty, place_ty_cpn);
                     let region_cpn = ref_data_cpn.reborrow().init_region();
                     Self::encode_region(*region, region_cpn);
                     let bor_kind_cpn = ref_data_cpn.reborrow().init_bor_kind();

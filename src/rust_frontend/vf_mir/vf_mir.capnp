@@ -489,6 +489,7 @@ struct Body {
                 }
                 region @0: Ty.Region;
                 borKind @1: BorrowKind;
+                placeTy @3: Ty;
                 place @2: Place;
             }
 

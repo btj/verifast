@@ -35,3 +35,19 @@ pred ref_padding_initialized<T>(p: *T;);
 pred_ctor ref_initialized_<T>(p: *T)(;) = ref_initialized(p);
 
 @*/
+
+fn create_ref_mut<T>(x: *T) -> *T;
+//@ req true;
+//@ ens result == x;
+
+fn create_ref<T>(x: *T) -> *T;
+//@ req true;
+//@ ens result == x;
+
+fn create_slice_ref<T>(x: slice_ref<'static, T>) -> slice_ref<'static, T>;
+//@ req true;
+//@ ens result == x;
+
+fn create_str_ref(x: str_ref<'static>) -> str_ref<'static>;
+//@ req true;
+//@ ens result == x;

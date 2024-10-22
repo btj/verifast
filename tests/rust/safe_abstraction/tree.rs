@@ -184,8 +184,10 @@ impl Tree {
     pub fn new_nonempty(data: *mut u8, left: Tree, right: Tree) -> Tree
     {
         unsafe {
-            let mut left_ = std::mem::ManuallyDrop::new(left);
-            let mut right_ = std::mem::ManuallyDrop::new(right);
+            let mut left_ = left.root;
+            std::mem::forget(left);
+            let mut right_ = right.root;
+            std::mem::forget(right);
             let result = std::alloc::alloc(std::alloc::Layout::new::<Node>()) as *mut Node;
             if result.is_null() {
                 std::alloc::handle_alloc_error(std::alloc::Layout::new::<Node>());
@@ -193,10 +195,10 @@ impl Tree {
             //@ assume(result as usize & 1 == 0);
             //@ close_struct(result);
             (*result).data = data;
-            (*result).left = left_.root;
-            (*left_.root).parent = result;
-            (*result).right = right_.root;
-            (*right_.root).parent = result;
+            (*result).left = left_;
+            (*left_).parent = result;
+            (*result).right = right_;
+            (*right_).parent = result;
             (*result).parent = std::ptr::null_mut();
             Tree { root: result }
         }

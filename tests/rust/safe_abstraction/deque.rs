@@ -455,7 +455,7 @@ impl<T> Deque<T> {
         //@ open foreachp2(_, _, _);
         //@ open elem_points_to::<T>()(node, ?value);
         //@ open Node_value(node, _);
-        let result = std::ptr::read(&(*node).value);
+        let result = std::ptr::read(std::ptr::addr_of!((*node).value));
         //@ close Node_value(node, _);
         (*(*node).prev).next = (*node).next;
         //@ open Nodes(_, _, _, _, _);
@@ -506,7 +506,7 @@ impl<T> Deque<T> {
         //@ open foreachp2([node], _, _);
         //@ open elem_points_to::<T>(node, ?value);
         //@ open Node_value(node, _);
-        let result = std::ptr::read(&(*node).value);
+        let result = std::ptr::read(std::ptr::addr_of!((*node).value));
         //@ close Node_value(node, _);
         /*@
         if 2 <= length(elems) {
@@ -573,7 +573,7 @@ impl<T> Deque<T> {
         //@ open elem_own::<T>(_t)(value);
         //@ open Node_value(first, _);
         //@ close_full_borrow_content::<T>(_t, &(*first).value);
-        std::ptr::drop_in_place(&mut (*first).value);
+        std::ptr::drop_in_place(std::ptr::addr_of_mut!((*first).value));
         //@ open_struct(first);
         std::alloc::dealloc(first as *mut u8, std::alloc::Layout::new::<Node<T>>());
         Self::dispose_nodes(first1, next);

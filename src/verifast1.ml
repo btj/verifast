@@ -6920,7 +6920,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         let _ = if List.mem_assoc pfns pm || List.mem_assoc pfns predinstmap0 then static_error l "Duplicate predicate family instance." None in
         iter (pn,ilist) (entry::pm) ds
       | _::ds -> iter (pn,ilist) pm ds
-      | [] -> List.rev pm
+      | [] -> List.rev pm 
     in
     let rec iter' pm ps=
       match ps with

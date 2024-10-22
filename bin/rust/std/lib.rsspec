@@ -28,6 +28,10 @@ mod cell {
         req *(cell as *T) |-> ?value;
         ens *cell |-> UnsafeCell_new_(value);
     
+    lem init_ref_UnsafeCell<T>(p: *UnsafeCell<T>);
+        req true;
+        ens ref_initialized::<UnsafeCell<T>>(p);
+    
     @*/
     
     impl<T> UnsafeCell<T> {
@@ -77,6 +81,10 @@ mod mem {
     //@ req thread_token(?t) &*& <T>.own(t, value);
     //@ ens thread_token(t);
     
+    fn forget<T>(value: T);
+    //@ req true;
+    //@ ens true;
+    
 }
 
 mod ptr {
@@ -114,8 +122,8 @@ mod ptr {
         //@ ens NonNull_ptr(result) == ptr;
 
         unsafe fn as_ref<'a, 'b>(self: &'b NonNull<T>) -> &'a T;
-        //@ req [?q](*self) |-> ?v;
-        //@ ens [q](*self) |-> v &*& result == NonNull_ptr(v);
+        //@ req [?q](*self) |-> ?v &*& ref_precreated_token(NonNull_ptr(v), ?p) &*& [?f]ref_initialized(p);
+        //@ ens [q](*self) |-> v &*& result == p &*& [f]ref_initialized(p);
 
         fn as_ptr(self: NonNull<T>) -> *mut T;
         //@ req true;
@@ -288,12 +296,14 @@ mod vec {
     /*@
     
     lem init_ref_Vec<T, A>(p: *Vec<T, A>, coef: real);
-        req ref_init_perm(p, ?x) &*& [?f](*x |-> ?vec);
-        ens ref_end_token(p, x, coef*f) &*& ref_initialized(p) &*& [coef*f](*p |-> vec) &*& [f - coef*f](*x |-> vec);
+        req ref_init_perm(p, ?x) &*& [?f](*x |-> ?vec) &*& [f]Vec(vec, ?capacity, ?elems);
+        ens ref_end_token(p, x, coef*f) &*& ref_initialized(p) &*&
+            [coef*f](*p |-> ?vec1) &*& [coef*f]Vec(vec1, capacity, elems) &*&
+            [f - coef*f](*x |-> vec) &*& [f - coef*f]Vec(vec, capacity, elems);
     
     lem end_ref_Vec<T, A>(p: *Vec<T, A>);
-        req ref_end_token(p, ?x, ?coef) &*& ref_initialized(p) &*& [coef](*p |-> ?vec);
-        ens [coef](*x |-> vec);
+        req ref_end_token(p, ?x, ?coef) &*& ref_initialized(p) &*& [coef](*p |-> ?vec) &*& [coef]Vec(vec, _, _);
+        ens [coef](*x |-> vec) &*& [coef]Vec(vec, _, _); // Here, for simplicity we say it turns out vec1 was equal to vec all along!
     
     lem_auto Vec_inv<T, A>();
         req [?f]Vec::<T, A>(?vec, ?capacity, ?elems);
@@ -411,6 +421,10 @@ mod sync {
             nonghost_callers_only
             req *p |-> ?v0 &*& (p as usize) % std::mem::size_of::<usize>() == 0;
             ens AtomicUsize(p as *AtomicUsize, v0);
+            
+        lem init_ref_AtomicUsize(p: *AtomicUsize);
+            req true;
+            ens ref_initialized::<AtomicUsize>(p);
 
         lem_type AtomicUsize_fetch_add_op(self: *AtomicUsize, val: usize, P: pred(), Q: pred(usize)) = lem();
             req AtomicUsize(self, ?v0) &*& P();
@@ -457,7 +471,7 @@ mod sync {
             //@ ens result as *mut usize == ptr;
 
             fn fetch_add<'a>(self: &'a AtomicUsize, val: usize, order: Ordering) -> usize;
-            //@ req order == std::sync::atomic::Ordering::SeqCst &*& is_AtomicUsize_fetch_add_ghop(?ghop, self, val, ?pre, ?post) &*& pre();
+            //@ req order == std::sync::atomic::Ordering::SeqCst &*& is_AtomicUsize_fetch_add_ghop(?ghop, ref_origin(self), val, ?pre, ?post) &*& pre();
             //@ ens post(result);
 
             fn fetch_sub<'a>(self: &'a AtomicUsize, val: usize, order: Ordering) -> usize;
@@ -465,7 +479,7 @@ mod sync {
             //@ ens post(result);
 
             fn load<'a>(self: &'a AtomicUsize, order: Ordering) -> usize;
-            //@ req order == std::sync::atomic::Ordering::SeqCst &*& is_AtomicUsize_load_ghop(?ghop, self, ?pre, ?post) &*& pre();
+            //@ req order == std::sync::atomic::Ordering::SeqCst &*& is_AtomicUsize_load_ghop(?ghop, ref_origin(self), ?pre, ?post) &*& pre();
             //@ ens post(result);
 
             fn compare_exchange<'a>(self: &'a AtomicUsize, current: usize, new: usize, success: Ordering, failure: Ordering) -> std::result::Result<usize, usize>;

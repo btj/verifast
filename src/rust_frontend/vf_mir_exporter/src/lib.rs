@@ -1762,7 +1762,7 @@ mod vf_mir_builder {
             let src_info_cpn = statement_cpn.reborrow().init_source_info();
             Self::encode_source_info(tcx, &statement.source_info, src_info_cpn);
             let kind_cpn = statement_cpn.init_kind();
-            Self::encode_statement_kind(tcx, enc_ctx, &statement.kind, kind_cpn);
+            Self::encode_statement_kind(tcx, enc_ctx, statement.source_info.span, &statement.kind, kind_cpn);
         }
 
         fn encode_source_info(
@@ -1779,6 +1779,7 @@ mod vf_mir_builder {
         fn encode_statement_kind(
             tcx: TyCtxt<'tcx>,
             enc_ctx: &mut EncCtx<'tcx, 'a>,
+            span: rustc_span::Span,
             statement_kind: &mir::StatementKind<'tcx>,
             mut statement_kind_cpn: statement_kind_cpn::Builder<'_>,
         ) {
@@ -1788,7 +1789,7 @@ mod vf_mir_builder {
                     let lhs_place_cpn = assign_data_cpn.reborrow().init_lhs_place();
                     Self::encode_place(enc_ctx, lhs_place, lhs_place_cpn);
                     let rhs_rvalue_cpn = assign_data_cpn.init_rhs_rvalue();
-                    Self::encode_rvalue(tcx, enc_ctx, rhs_rval, rhs_rvalue_cpn);
+                    Self::encode_rvalue(tcx, enc_ctx, span, rhs_rval, rhs_rvalue_cpn);
                 }
                 mir::StatementKind::Nop => statement_kind_cpn.set_nop(()),
                 // Todo @Nima: For now we do not support many statements and treat them as Nop
@@ -1799,6 +1800,7 @@ mod vf_mir_builder {
         fn encode_rvalue(
             tcx: TyCtxt<'tcx>,
             enc_ctx: &mut EncCtx<'tcx, 'a>,
+            span: rustc_span::Span,
             rvalue: &mir::Rvalue<'tcx>,
             rvalue_cpn: rvalue_cpn::Builder<'_>,
         ) {
@@ -1820,8 +1822,11 @@ mod vf_mir_builder {
                     Self::encode_region(*region, region_cpn);
                     let bor_kind_cpn = ref_data_cpn.reborrow().init_bor_kind();
                     Self::encode_borrow_kind(bor_kind, bor_kind_cpn);
-                    let place_cpn = ref_data_cpn.init_place();
+                    let place_cpn = ref_data_cpn.reborrow().init_place();
                     Self::encode_place(enc_ctx, place, place_cpn);
+                    let source_text = enc_ctx.tcx.sess.source_map().span_to_snippet(span).unwrap();
+                    let is_identifier = source_text.chars().all(|c| c.is_alphanumeric() || c == '_');
+                    ref_data_cpn.set_is_implicit(is_identifier);
                 }
                 mir::Rvalue::ThreadLocalRef(def_id) => todo!(),
                 mir::Rvalue::AddressOf(mutability, place) => {
@@ -2431,7 +2436,8 @@ mod vf_mir_builder {
             let local_decl_id_cpn = place_cpn.reborrow().init_local();
             Self::encode_local_decl_id(place.local, local_decl_id_cpn);
 
-            let mut pty = PlaceTy::from_ty(enc_ctx.body().local_decls()[place.local].ty);
+            let local = &enc_ctx.body().local_decls()[place.local];
+            let mut pty = PlaceTy::from_ty(local.ty);
             let mut kind = PlaceKind::Other;
             place_cpn.reborrow().fill_projection(place.projection, |place_elm_cpn, place_elm| {
                 kind = Self::encode_place_element(enc_ctx, pty.ty, &place_elm, place_elm_cpn, kind);

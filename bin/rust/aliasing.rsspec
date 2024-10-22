@@ -45,6 +45,10 @@ fn create_ref_mut<T>(x: *T) -> *T;
 //@ req *x |-> ?v;
 //@ ens *result |-> v &*& ref_mut_end_token(result, x);
 
+fn reborrow_ref_mut_implicit<T>(x: *T) -> *T;
+//@ req true;
+//@ ens result == x;
+
 /*@
 
 lem end_ref_mut<T>(p: *T);
@@ -70,6 +74,10 @@ fn create_ref<T>(x: *T) -> *T;
 fn reborrow_ref<T>(x: *T) -> *T;
 //@ req [?f]ref_initialized(x);
 //@ ens [f]ref_initialized(x) &*& result == x;
+
+fn reborrow_ref_UnsafeCell(x: *_) -> *_;
+//@ req true;
+//@ ens result == x;
 
 fn create_slice_ref<T>(x: slice_ref<'static, T>) -> slice_ref<'static, T>;
 //@ req true; // TODO

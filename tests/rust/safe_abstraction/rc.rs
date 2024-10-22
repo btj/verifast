@@ -200,7 +200,15 @@ impl<T> std::ops::Deref for Rc<T> {
             //@ assert [_]exists::<std::ptr::NonNull<RcBox<T>>>(?nnp);
             //@ open_frac_borrow('a, Rc_frac_bc(self, nnp), _q_a);
             //@ open [?qp]Rc_frac_bc::<T>(self, nnp)();
-            let r = &self.ptr.as_ref().value;
+            
+            let ptr = (*(self as *const Rc<T>)).ptr;
+            //@ let p = precreate_ref(&ptr);
+            //@ std::ptr::init_ref_NonNull(p, 1/2);
+            //@ let p1 = precreate_ref::<RcBox<T>>(std::ptr::NonNull_ptr(nnp));
+            //@ open_ref_init_perm(p1);
+            //
+            let r = &ptr.as_ref().value;
+            //@ std::ptr::end_ref_NonNull(p);
             //@ close [qp]Rc_frac_bc::<T>(self, nnp)();
             //@ close_frac_borrow(qp, Rc_frac_bc(self, nnp));
             //@ assert [_]exists::<real>(?frac) &*& [_]exists::<lifetime_t>(?dk);

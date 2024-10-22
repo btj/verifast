@@ -16,6 +16,7 @@ unsafe fn assert(b: bool)
 pred_ctor space_inv(x: *std::sync::atomic::AtomicUsize)() = [1/2]std::sync::atomic::AtomicUsize(x, ?value) &*& value == 0 || value == 1;
 
 pred incrementor_pre(x: *mut u8) =
+    ref_origin(x) == x &*&
     [_]atomic_space(MaskTop, space_inv(x as *std::sync::atomic::AtomicUsize)) &*&
     [1/2]std::sync::atomic::AtomicUsize(x as *std::sync::atomic::AtomicUsize, 0);
 
@@ -26,7 +27,7 @@ unsafe fn incrementor(x_: *mut u8)
 //@ ens true;
 {
     //@ open incrementor_pre(x_);
-    let x = &*(x_ as *mut std::sync::atomic::AtomicUsize);
+    let x = x_ as *mut std::sync::atomic::AtomicUsize;
     {
         /*@
         pred pre() = [_]atomic_space(MaskTop, space_inv(x)) &*& [1/2]std::sync::atomic::AtomicUsize(x, 0);
@@ -54,7 +55,10 @@ unsafe fn incrementor(x_: *mut u8)
         };
         @*/
         //@ close pre();
-        x.fetch_add(1, SeqCst);
+        //@ let p = precreate_ref(x);
+        //@ std::sync::atomic::init_ref_AtomicUsize(p);
+        (&*x).fetch_add(1, SeqCst);
+        //@ leak ref_init_perm(p, x) &*& ref_initialized(p);
         //@ open post(_);
     }
 }
@@ -62,19 +66,18 @@ unsafe fn incrementor(x_: *mut u8)
 fn main() {
     unsafe {
         let layout = std::alloc::Layout::new::<std::sync::atomic::AtomicUsize>();
-        let x_ = std::alloc::alloc(layout) as *mut std::sync::atomic::AtomicUsize;
-        if x_.is_null() {
+        let x = std::alloc::alloc(layout) as *mut std::sync::atomic::AtomicUsize;
+        if x.is_null() {
             std::alloc::handle_alloc_error(layout);
         }
-        //@ from_u8s_(x_);
-        std::ptr::write(x_, std::sync::atomic::AtomicUsize::new(0));
-        let x = &*x_;
+        //@ from_u8s_(x);
+        std::ptr::write(x, std::sync::atomic::AtomicUsize::new(0));
         //@ produce_fn_ptr_chunk platform::threading::thread_run(incrementor)(incrementor_pre)(data) { call(); }
         //@ close space_inv(x)();
         //@ create_atomic_space(MaskTop, space_inv(x));
         //@ leak atomic_space(MaskTop, space_inv(x));
-        //@ close incrementor_pre(x_ as *u8);
-        platform::threading::fork(incrementor as unsafe fn(*mut u8), x_ as *mut u8);
+        //@ close incrementor_pre(x as *u8);
+        platform::threading::fork(incrementor as unsafe fn(*mut u8), x as *mut u8);
         let mut x1 = 0;
         {
             /*@
@@ -95,7 +98,9 @@ fn main() {
             };
             @*/
             //@ close pre();
-            x1 = x.load(SeqCst);
+            //@ let p = precreate_ref(x);
+            //@ std::sync::atomic::init_ref_AtomicUsize(p);
+            x1 = (&*x).load(SeqCst);
             //@ open post(_);
         }
         assert(x1 == 0 || x1 == 1);

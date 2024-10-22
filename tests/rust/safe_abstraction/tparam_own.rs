@@ -32,6 +32,13 @@ fn swap<'a, T>(r1: &'a mut T, r2: &'a mut T) {
 fn share<'a, T>(r: &'a mut T) -> &'a T {
     //@ produce_type_interp::<T>();
     //@ share_full_borrow::<T>('a, _t, r);
+    //@ let result_ = precreate_ref(r);
+    //@ init_ref_share::<T>('a, _t, result_);
     //@ leak type_interp();
-    r
+    //@ open_frac_borrow('a, ref_initialized_(result_), _q_a);
+    //@ open [?fr]ref_initialized_::<T>(result_)();
+    let result = &*r;
+    //@ close [fr]ref_initialized_::<T>(result_)();
+    //@ close_frac_borrow(fr, ref_initialized_(result_));
+    result
 }

@@ -500,6 +500,7 @@ struct Body {
                 borKind @1: BorrowKind;
                 placeTy @3: Ty;
                 place @2: Place;
+                isImplicit @4: Bool;
             }
 
             struct CastData {

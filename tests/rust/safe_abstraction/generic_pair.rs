@@ -184,8 +184,8 @@ lem init_ref_Pair<A, B>(p: *Pair<A, B>)
         frac_borrow_implies_scaled(k, fr/2, struct_Pair_padding_(p));
     }
     
-    init_ref_share(k, t, &(*p).fst);
-    init_ref_share(k, t, &(*p).snd);
+    init_ref_share_m(k, t, &(*p).fst);
+    init_ref_share_m(k, t, &(*p).snd);
     note(pointer_within_limits(ref_origin(&(*p).snd)));
     close Pair_share::<A, B>(k, t, p);
     leak Pair_share(k, t, p);
@@ -261,13 +261,35 @@ impl<A, B> Pair<A, B> {
     }
     
     pub fn deref_fst<'a>(&'a self) -> &'a A {
-        //@ open Pair_share::<A, B>('a, _t, self);
-        &self.fst
+        unsafe {
+            //@ open Pair_share::<A, B>('a, _t, self);
+            //@ let p = precreate_ref(&(*self).fst);
+            //@ produce_type_interp::<A>();
+            //@ init_ref_share('a, _t, p);
+            //@ leak type_interp();
+            //@ open_frac_borrow('a, ref_initialized_(p), _q_a);
+            //@ open [?fr]ref_initialized_::<A>(p)();
+            let result = &(*(self as *const Self)).fst;
+            //@ close [fr]ref_initialized_::<A>(p)();
+            //@ close_frac_borrow(fr, ref_initialized_(p));
+            result
+        }
     }
     
     pub fn deref_snd<'a>(&'a self) -> &'a B {
-        //@ open Pair_share::<A, B>('a, _t, self);
-        &self.snd
+        unsafe {
+            //@ open Pair_share::<A, B>('a, _t, self);
+            //@ let p = precreate_ref(&(*self).snd);
+            //@ produce_type_interp::<B>();
+            //@ init_ref_share('a, _t, p);
+            //@ leak type_interp();
+            //@ open_frac_borrow('a, ref_initialized_(p), _q_a);
+            //@ open [?fr]ref_initialized_::<B>(p)();
+            let result = &(*(self as *const Self)).snd;
+            //@ close [fr]ref_initialized_::<B>(p)();
+            //@ close_frac_borrow(fr, ref_initialized_(p));
+            result
+        }
     }
     
     pub fn replace_fst<'a>(&'a mut self, new_fst: A) -> A {
@@ -276,8 +298,8 @@ impl<A, B> Pair<A, B> {
             //@ open Pair_full_borrow_content::<A, B>(_t, self)();
             //@ open Pair_own::<A, B>(_t, ?pair0);
             //@ open Pair_fst(self, pair0.fst);
-            let result = std::ptr::read(&self.fst);
-            std::ptr::write(&mut self.fst, new_fst);
+            let result = std::ptr::read(std::ptr::addr_of!(self.fst));
+            std::ptr::write(std::ptr::addr_of_mut!(self.fst), new_fst);
             //@ close Pair_fst(self, new_fst);
             //@ close Pair_own::<A, B>(_t, Pair::<A, B> { fst: new_fst, snd: pair0.snd });
             //@ close Pair_full_borrow_content::<A, B>(_t, self)();
@@ -293,8 +315,8 @@ impl<A, B> Pair<A, B> {
             //@ open Pair_full_borrow_content::<A, B>(_t, self)();
             //@ open Pair_own::<A, B>(_t, ?pair0);
             //@ open Pair_snd(self, pair0.snd);
-            let result = std::ptr::read(&self.snd);
-            std::ptr::write(&mut self.snd, new_snd);
+            let result = std::ptr::read(std::ptr::addr_of!(self.snd));
+            std::ptr::write(std::ptr::addr_of_mut!(self.snd), new_snd);
             //@ close Pair_snd(self, new_snd);
             //@ close Pair_own::<A, B>(_t, Pair::<A, B> { fst: pair0.fst, snd: new_snd });
             //@ close Pair_full_borrow_content::<A, B>(_t, self)();

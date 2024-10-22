@@ -438,8 +438,8 @@ pred init_ref_helper_token(fr: real, q: real, k: lifetime_t, P: pred(;)) =
     lifetime_inclusion(k, k1) == true &*& close_frac_borrow_token_strong(k1, P, q, k, fr);
 
 lem init_ref_helper1(P: pred(;), q: real)
-    req atomic_mask(Nlft) &*& [_]frac_borrow(?k, P) &*& [q]lifetime_token(k);
-    ens atomic_mask(Nlft) &*& [?fr]P() &*& init_ref_helper_token(fr, q, k, P);
+    req atomic_mask(?mask) &*& mask_le(Nlft, mask) == true &*& [_]frac_borrow(?k, P) &*& [q]lifetime_token(k);
+    ens atomic_mask(mask) &*& [?fr]P() &*& init_ref_helper_token(fr, q, k, P);
 {
     let k1 = open_frac_borrow_strong_m(k, P, q);
     close exists(k1);
@@ -454,8 +454,8 @@ pred_ctor init_ref_helper2_Ctx<T>(prem: *_, Ctx: pred(), fr: real, Q: pred(;), p
     is_init_ref_helper_premise(prem, Ctx, fr, Q, p, P) &*& Ctx();
     
 lem init_ref_helper2<T>()
-    req atomic_mask(Nlft) &*& init_ref_helper_token(?fr, ?q, ?k, ?P) &*& is_init_ref_helper_premise::<T>(?prem, ?Ctx, fr, ?Q, ?p, P) &*& Ctx() &*& [fr/2]Q() &*& ref_initialized::<T>(p);
-    ens atomic_mask(Nlft) &*& [q]lifetime_token(k) &*& [_]frac_borrow(k, Q) &*& [_]frac_borrow(k, ref_initialized_::<T>(p)) &*& is_init_ref_helper_premise::<T>(prem, Ctx, fr, Q, p, P);
+    req atomic_mask(?mask) &*& mask_le(Nlft, mask) == true &*& init_ref_helper_token(?fr, ?q, ?k, ?P) &*& is_init_ref_helper_premise::<T>(?prem, ?Ctx, fr, ?Q, ?p, P) &*& Ctx() &*& [fr/2]Q() &*& ref_initialized::<T>(p);
+    ens atomic_mask(mask) &*& [q]lifetime_token(k) &*& [_]frac_borrow(k, Q) &*& [_]frac_borrow(k, ref_initialized_::<T>(p)) &*& is_init_ref_helper_premise::<T>(prem, Ctx, fr, Q, p, P);
 {
     open init_ref_helper_token(fr, q, k, P);
     open exists(?k1);

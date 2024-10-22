@@ -28,15 +28,19 @@ unsafe fn read_line<'a>(socket: platform::sockets::Socket, buffer: &'a mut Vec<u
 //@ req [?q]platform::sockets::Socket(socket) &*& *buffer |-> ?buffer0 &*& std::vec::Vec(buffer0, _, _);
 //@ ens [q]platform::sockets::Socket(socket) &*& *buffer |-> ?buffer1 &*& std::vec::Vec(buffer1, _, _);
 {
+    //@ std::vec::init_ref_Vec(precreate_ref(buffer), 1/2);
     let mut offset = buffer.len();
+    //@ { assert ref_end_token(?buffer_, buffer, 1/2); std::vec::end_ref_Vec(buffer_); }
     loop {
         //@ inv [q]platform::sockets::Socket(socket) &*& *buffer |-> ?buffer1 &*& std::vec::Vec(buffer1, _, ?bs) &*& length(bs) == offset;
         const RECV_BUF_SIZE: usize = 1000;
         buffer.reserve(RECV_BUF_SIZE);
+        //@ end_ref_mut_();
         //@ assert *buffer |-> ?buffer2;
         //@ let buf = std::vec::Vec_separate_buffer(buffer2);
         //@ array__split(buf + offset, 1000);
         let count = socket.receive(buffer.as_mut_ptr().add(offset), RECV_BUF_SIZE);
+        //@ end_ref_mut_();
         //@ array_join(buf);
         //@ array__join(buf + offset + count);
         if count == 0 {
@@ -44,15 +48,20 @@ unsafe fn read_line<'a>(socket: platform::sockets::Socket, buffer: &'a mut Vec<u
             break;
         }
         buffer.set_len(offset + count);
+        //@ end_ref_mut_();
         //@ assert *buffer |-> ?buffer3;
         //@ array_split(buf, offset);
-        let nl_index = memchr(buffer.as_ptr().offset(offset as isize), count, b'\n') as usize - (buffer.as_ptr() as usize + offset);
+        //@ std::vec::init_ref_Vec(precreate_ref(buffer), 1/2);
+        let buffer_ptr = buffer.as_ptr();
+        let nl_index = memchr(buffer_ptr.offset(offset as isize), count, b'\n') as usize - (buffer_ptr as usize + offset);
+        //@ { assert ref_end_token(?r, buffer, 1/2); std::vec::end_ref_Vec(r); }
         if nl_index == count {
             offset += count;
             //@ array_join(buf);
             //@ std::vec::Vec_unseparate_buffer(buffer3);
         } else {
             buffer.set_len(offset + nl_index + 1);
+            //@ end_ref_mut_();
             //@ assert *buffer |-> ?buffer4;
             //@ array_split(buf + offset, nl_index + 1);
             //@ array_join(buf);
@@ -83,11 +92,16 @@ unsafe fn handle_connection<'a>(buffer: &'a mut Vec<u8>, socket: platform::socke
 //@ ens *buffer |-> ?buffer1 &*& std::vec::Vec(buffer1, _, _);
 {
     read_line(socket, buffer);
+    //@ end_ref_mut_();
     //@ assert *buffer |-> ?buffer1;
     send_str(socket, "HTTP/1.0 200 OK\r\n\r\n");
+    //@ std::vec::init_ref_Vec(precreate_ref(buffer), 1/2);
     let len = buffer.len();
+    //@ { assert ref_end_token(?r, buffer, _); std::vec::end_ref_Vec(r); }
     //@ let buf = std::vec::Vec_separate_buffer(buffer1);
+    //@ std::vec::init_ref_Vec(precreate_ref(buffer), 1/2);
     socket.send(buffer.as_ptr(), len);
+    //@ { assert ref_end_token(?r, buffer, _); std::vec::end_ref_Vec(r); }
     //@ std::vec::Vec_unseparate_buffer(buffer1);
     socket.close();
 }
@@ -98,6 +112,7 @@ unsafe fn print<'a>(text: &'a str)
 {
     let mut stdout = std::io::stdout();
     stdout.write(text.as_bytes()).unwrap();
+    //@ end_ref_mut_();
     std::mem::drop(stdout);
 }
 
@@ -111,6 +126,7 @@ fn main() {
             //@ inv platform::sockets::ServerSocket(server_socket) &*& buffer |-> ?buffer_ &*& std::vec::Vec(buffer_, _, _);
             let client_socket = server_socket.accept();
             handle_connection(&mut buffer, client_socket);
+            //@ { assert ref_mut_end_token(?r, &buffer) &*& ref_mut_end_token(?r1, r); end_ref_mut(r1); end_ref_mut_(); }
         }
     }
 }

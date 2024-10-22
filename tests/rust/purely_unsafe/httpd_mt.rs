@@ -246,6 +246,7 @@ unsafe fn print<'a>(text: &'a str)
 {
     let mut stdout = std::io::stdout();
     stdout.write(text.as_bytes()).unwrap();
+    //@ end_ref_mut_();
     std::mem::drop(stdout);
 }
 
@@ -274,7 +275,7 @@ fn main() {
             //@ close_struct(connection);
             (*connection).socket = client_socket;
             (*connection).mutex = mutex;
-            (*connection).buffer = &mut buffer as *mut Buffer;
+            (*connection).buffer = std::ptr::addr_of_mut!(buffer);
             //@ produce_fn_ptr_chunk platform::threading::thread_run(handle_connection)(handle_connection_pre)(data) { call(); }
             platform::threading::fork(handle_connection, connection as *mut u8);
         }

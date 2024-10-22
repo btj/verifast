@@ -352,6 +352,14 @@ struct Body {
         sourceInfo @3: SourceInfo;
     }
 
+    struct PlaceKind {
+        union {
+            mutableRef @0: Void;
+            sharedRef @1: Void;
+            other @2: Void;
+        }
+    }
+
     struct Place {
         struct PlaceElement {
             struct FieldData {
@@ -368,6 +376,7 @@ struct Body {
 
         local @0: LocalDeclId;
         projection @1: List(PlaceElement);
+        kind @2: PlaceKind;
     }
 
     struct Scalar {

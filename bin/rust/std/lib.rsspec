@@ -282,10 +282,18 @@ mod vec {
 
     struct Vec<T, A>;
     
-    //@ pred Vec<T, A>(self: Vec<T, A>, capacity: usize, elems: list<T>); // This predicate does *not* assert ownership of the elements.
-    //@ pred Vec_minus_buffer<T, A>(self: Vec<T, A>, capacity: usize, len: usize, buffer: *T);
+    //@ pred Vec<T, A>(self: Vec<T, A>; capacity: usize, elems: list<T>); // This predicate does *not* assert ownership of the elements.
+    //@ pred Vec_minus_buffer<T, A>(self: Vec<T, A>; capacity: usize, len: usize, buffer: *T);
     
     /*@
+    
+    lem init_ref_Vec<T, A>(p: *Vec<T, A>, coef: real);
+        req ref_init_perm(p, ?x) &*& [?f](*x |-> ?vec);
+        ens ref_end_token(p, x, coef*f) &*& ref_initialized(p) &*& [coef*f](*p |-> vec) &*& [f - coef*f](*x |-> vec);
+    
+    lem end_ref_Vec<T, A>(p: *Vec<T, A>);
+        req ref_end_token(p, ?x, ?coef) &*& ref_initialized(p) &*& [coef](*p |-> ?vec);
+        ens [coef](*x |-> vec);
     
     lem_auto Vec_inv<T, A>();
         req [?f]Vec::<T, A>(?vec, ?capacity, ?elems);

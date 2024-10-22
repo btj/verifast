@@ -178,6 +178,7 @@ unsafe fn print<'a>(text: &'a str)
 {
     let mut stdout = std::io::stdout();
     stdout.write(text.as_bytes()).unwrap();
+    //@ { assert ref_mut_end_token(?r, &stdout); end_ref_mut(r); }
     std::mem::drop(stdout);
 }
 
@@ -194,7 +195,7 @@ fn main() {
         loop {
             //@ inv platform::sockets::ServerSocket(server_socket) &*& Buffer(&buffer, _, _);
             let client_socket = server_socket.accept();
-            handle_connection(&mut buffer as *mut Buffer, client_socket);
+            handle_connection(std::ptr::addr_of_mut!(buffer), client_socket);
         }
     }
 }

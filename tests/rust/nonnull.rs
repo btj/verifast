@@ -62,10 +62,9 @@ pub mod ptr {
             NonNull { pointer: ptr }
         }
 
-        // TODO: It is a good example to show the unsoundness w.r.t. aliasing semantics of Rust
         pub unsafe fn as_ref<'a>(&'a self) -> &'a T
-            //@ req [?q](*self).pointer |-> ?p;
-            //@ ens [q](*self).pointer |-> p;
+            //@ req [?q](*self).pointer |-> ?p &*& ref_precreated_token(p, ?r) &*& ref_initialized(r);
+            //@ ens [q](*self).pointer |-> p &*& ref_initialized(r) &*& result == r;
         {
             &*self.pointer
         }

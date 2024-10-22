@@ -2568,12 +2568,15 @@ module Make (Args : VF_MIR_TRANSLATOR_ARGS) = struct
           let* place_expr = translate_place place_cpn loc in
           let place_ty = decode_ty (place_ty_get ref_data_cpn) in
           let fn_name =
-            match place_ty, BorrowKind.get bor_kind_cpn with
-              `Str, Shared -> "create_str_ref"
-            | `Slice _, Mut -> "create_slice_ref_mut"
-            | `Slice _, Shared -> "create_slice_ref"
-            | _, Mut -> "create_ref_mut"
-            | _, Shared -> "create_ref"
+            match place_ty, BorrowKind.get bor_kind_cpn, BodyRd.PlaceKind.get (BodyRd.Place.kind_get place_cpn) with
+            | `Str, Shared, SharedRef -> "create_str_ref"
+            | `Str, Shared, _ -> "reborrow_str_ref"
+            | `Slice _, Mut, _ -> "create_slice_ref_mut"
+            | `Slice _, Shared, SharedRef -> "reborrow_slice_ref"
+            | `Slice _, Shared, _ -> "create_slice_ref"
+            | _, Mut, _ -> "create_ref_mut"
+            | _, Shared, SharedRef -> "reborrow_ref"
+            | _, Shared, _ -> "create_ref"
           in
           let expr = Ast.CallExpr (loc, fn_name, [], [], [LitPat (AddressOf (loc, place_expr))], Static) in
           Ok (`TrRvalueExpr expr)

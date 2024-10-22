@@ -4,6 +4,9 @@
 
 /*@
 
+fix is_shared_ref_provenance(prov: pointer_provenance) -> bool;
+fix is_shared_ref(x: *_) -> bool { is_shared_ref_provenance((x as pointer).provenance) }
+
 fix ref_origin_provenance(prov: pointer_provenance) -> pointer_provenance;
 fix ref_origin<t>(p: *t) -> *t { pointer_ctor(ref_origin_provenance((p as pointer).provenance), (p as pointer).address) as *t }
 
@@ -18,6 +21,8 @@ lem_auto(ptr_provenance_max_addr(ref_origin_provenance(prov))) ref_origin_max_ad
 lem_auto(ref_origin(ref_origin(p))) ref_origin_ref_origin(p: *_);
     req true;
     ens ref_origin(ref_origin(p)) == ref_origin(p);
+
+pred ref_mut_end_token<T>(p: *T; x: *T);
 
 pred ref_init_perm<T>(p: *T; x: *T);
 pred ref_padding_init_perm<T>(p: *T; x: *T);
@@ -37,17 +42,43 @@ pred_ctor ref_initialized_<T>(p: *T)(;) = ref_initialized(p);
 @*/
 
 fn create_ref_mut<T>(x: *T) -> *T;
-//@ req true;
-//@ ens result == x;
+//@ req *x |-> ?v;
+//@ ens *result |-> v &*& ref_mut_end_token(result, x);
+
+/*@
+
+lem end_ref_mut<T>(p: *T);
+    req ref_mut_end_token(p, ?x) &*& *p |-> ?v;
+    ens *x |-> v;
+
+lem end_ref_mut_<t>();
+    req ref_mut_end_token::<t>(?p, ?x) &*& *p |-> ?v;
+    ens *x |-> v;
+
+pred ref_precreated_token<T>(x: *T, p: *T);
+
+lem precreate_ref<T>(x: *T) -> *T;
+   req true;
+   ens ref_precreated_token(x, result) &*& ref_init_perm(result, x);
+
+@*/
 
 fn create_ref<T>(x: *T) -> *T;
-//@ req true;
-//@ ens result == x;
+//@ req ref_precreated_token(x, ?p) &*& [?f]ref_initialized(p);
+//@ ens [f]ref_initialized(p) &*& result == p;
+
+fn reborrow_ref<T>(x: *T) -> *T;
+//@ req [?f]ref_initialized(x);
+//@ ens [f]ref_initialized(x) &*& result == x;
 
 fn create_slice_ref<T>(x: slice_ref<'static, T>) -> slice_ref<'static, T>;
-//@ req true;
+//@ req true; // TODO
+//@ ens result == x;
+
+fn reborrow_slice_ref<T>(x: slice_ref<'static, T>) -> slice_ref<'static, T>;
+//@ req true; // TODO
 //@ ens result == x;
 
 fn create_str_ref(x: str_ref<'static>) -> str_ref<'static>;
-//@ req true;
+//@ req true; // TODO
 //@ ens result == x;

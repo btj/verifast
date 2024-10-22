@@ -521,6 +521,9 @@ mod vf_mir_builder {
         visitor.submodules
     }
 
+    #[derive(Clone, Copy)]
+    enum PlaceKind { MutableRef, SharedRef, Other }
+
     enum EncKind<'tcx, 'a> {
         Body(&'a mir::Body<'tcx>),
         Adt,
@@ -2429,10 +2432,17 @@ mod vf_mir_builder {
             Self::encode_local_decl_id(place.local, local_decl_id_cpn);
 
             let mut pty = PlaceTy::from_ty(enc_ctx.body().local_decls()[place.local].ty);
-            place_cpn.fill_projection(place.projection, |place_elm_cpn, place_elm| {
-                Self::encode_place_element(enc_ctx, pty.ty, &place_elm, place_elm_cpn);
+            let mut kind = PlaceKind::Other;
+            place_cpn.reborrow().fill_projection(place.projection, |place_elm_cpn, place_elm| {
+                kind = Self::encode_place_element(enc_ctx, pty.ty, &place_elm, place_elm_cpn, kind);
                 pty = pty.projection_ty(enc_ctx.tcx, place_elm);
             });
+            let mut kind_cpn = place_cpn.init_kind();
+            match kind {
+                PlaceKind::MutableRef => kind_cpn.set_mutable_ref(()),
+                PlaceKind::SharedRef => kind_cpn.set_shared_ref(()),
+                PlaceKind::Other => kind_cpn.set_other(()),
+            }
         }
 
         fn encode_place_element(
@@ -2440,13 +2450,24 @@ mod vf_mir_builder {
             ty: ty::Ty<'tcx>,
             place_elm: &mir::PlaceElem<'tcx>,
             mut place_elm_cpn: place_element_cpn::Builder<'_>,
-        ) {
+            place_kind: PlaceKind
+        ) -> PlaceKind {
             debug!(
                 "Encoding place element {:?} Projecting from {:?}",
                 place_elm, ty
             );
             match place_elm {
-                mir::ProjectionElem::Deref => place_elm_cpn.set_deref(()),
+                mir::ProjectionElem::Deref => {
+                    place_elm_cpn.set_deref(());
+                    match ty.kind() {
+                        ty::TyKind::Ref(_, _, mutability) =>
+                            match mutability {
+                                ty::Mutability::Not => PlaceKind::SharedRef,
+                                ty::Mutability::Mut => PlaceKind::MutableRef,
+                            },
+                        _ => PlaceKind::Other,
+                    }
+                }
                 mir::ProjectionElem::Field(field, fty) => {
                     let mut field_data_cpn = place_elm_cpn.init_field();
                     field_data_cpn.set_index(field.as_u32());
@@ -2463,9 +2484,11 @@ mod vf_mir_builder {
                     /* Todo @Nima: When `encode_ty` becomes a method of `EncCtx` there would not be
                      * such strange arguments `enc_ctx.tcx` and `enc_tcx`
                      */
+                    place_kind
                 }
                 mir::ProjectionElem::Downcast(symbol, variant_idx) => {
                     place_elm_cpn.set_downcast(variant_idx.as_u32());
+                    place_kind
                 }
                 _ => todo!(),
             }

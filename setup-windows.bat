@@ -12,7 +12,7 @@ bitsadmin.exe /transfer "opam" https://github.com/ocaml/opam/releases/download/2
 %VF_CYGWIN_DIR%\bin\bash -lc "cygcheck -c -d" 
 
 bitsadmin.exe /transfer "cygwin" https://www.cygwin.com/setup-x86_64.exe %TEMP%\setup-cygwin.exe || exit /b 1
-%TEMP%\setup-cygwin.exe -B -qnNd -R %VF_CYGWIN_DIR% -l %VF_CYGWIN_DIR%/var/cache/setup -s https://ftp.snt.utwente.nl/pub/software/cygwin/ -P p7zip -P cygutils-extra -P mingw64-x86_64-gcc-g++ -P make -P patch -P rlwrap -P libreadline6 -P diffutils -P wget -P cmake -P ninja || exit /b 1
+%TEMP%\setup-cygwin.exe -B -qnNd -R %VF_CYGWIN_DIR% -l %VF_CYGWIN_DIR%/var/cache/setup -s https://ftp.snt.utwente.nl/pub/software/cygwin/ -P p7zip -P cygutils-extra -P mingw64-x86_64-gcc-g++ -P make -P patch -P rlwrap -P libreadline6 -P diffutils -P wget -P cmake -P ninja -P rsync -P unzip -P pkg-config || exit /b 1
 
 @rem Add ",noacl" to prevent cygwin from messing with Windows file permissions
 echo none /cygdrive cygdrive binary,posix=0,user,noacl 0 0 > %VF_CYGWIN_DIR%\etc\fstab || exit /b 1

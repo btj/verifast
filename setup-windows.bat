@@ -1,3 +1,7 @@
+gh --repo ocaml/opam release download 2.3.0 --pattern opam-2.3.0-x86_64-windows.exe -O opam.exe
+./opam init -y
+./opam install lablgtk
+
 @echo on
 @rem Pushbutton installation of VeriFast dependencies.
 @rem 

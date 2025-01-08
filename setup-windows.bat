@@ -3,8 +3,8 @@
 @rem 
 @rem WARNING: creates files/directories in c:\, such as c:\cygwin and c:\OCaml
 
-winget install Ocaml.opam || exit /b
-opam init --help
+bitsadmin.exe /transfer "opam" https://github.com/ocaml/opam/releases/download/2.3.0/opam-2.3.0-x86_64-windows.exe %TEMP%\opam.exe || exit /b
+%TEMP%\opam init --help
 
 @rem First, list pre-installed packages
 c:\cygwin64\bin\bash -lc "cygcheck -c -d" 

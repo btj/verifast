@@ -31,7 +31,10 @@ script_dir=$(pwd)
 
 cd /cygdrive/c
 dl_and_unzip https://github.com/verifast/vf-llvm-clang-build/releases/download/v2.0.4/vf-llvm-clang-build-$VF_LLVM_CLANG_BUILD_VERSION-Windows-MinGW-x86_64.tar.gz B6FF69088BF31A5C8B01B9D717B724CBC0A1362243C852FCBACBC0F58AC4F378 256 z
-dl_and_unzip https://github.com/verifast/vfdeps-win/releases/download/23.04/vfdeps-e62a07d-win.txz 63a593c235fbcb4d86c4cbe821aca1a943873daadfbbc1af37f0bb3f 224 j
+# dl_and_unzip https://github.com/verifast/vfdeps-win/releases/download/23.04/vfdeps-e62a07d-win.txz 63a593c235fbcb4d86c4cbe821aca1a943873daadfbbc1af37f0bb3f 224 j
+
+opam init -y
+opam install -y lablgtk
 
 PATHCMD='export PATH="/cygdrive/c/vfdeps/bin:$PATH"'
 if ! rustup show home; then

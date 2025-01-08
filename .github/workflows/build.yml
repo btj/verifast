@@ -272,7 +272,7 @@ jobs:
           fetch-tags: true
 
       - name: Build setup
-        run: pwsh setup-windows.ps1
+        run: ./setup-windows.bat
 
       - name: Build
         # Disable dune cache to work around a dune bug https://github.com/verifast/verifast/issues/612

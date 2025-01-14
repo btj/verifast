@@ -1,0 +1,570 @@
+<!DOCTYPE HTML>
+<html lang="en" class="light sidebar-visible" dir="ltr">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>The VeriFast for Rust Reference</title>
+        <meta name="robots" content="noindex">
+
+
+        <!-- Custom HTML head -->
+
+        <meta name="description" content="">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff">
+
+        <link rel="icon" href="favicon.svg">
+        <link rel="shortcut icon" href="favicon.png">
+        <link rel="stylesheet" href="css/variables.css">
+        <link rel="stylesheet" href="css/general.css">
+        <link rel="stylesheet" href="css/chrome.css">
+        <link rel="stylesheet" href="css/print.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="FontAwesome/css/font-awesome.css">
+        <link rel="stylesheet" href="fonts/fonts.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" href="highlight.css">
+        <link rel="stylesheet" href="tomorrow-night.css">
+        <link rel="stylesheet" href="ayu-highlight.css">
+
+        <!-- Custom theme stylesheets -->
+
+
+        <!-- Provide site root to javascript -->
+        <script>
+            var path_to_root = "";
+            var default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? "navy" : "light";
+        </script>
+        <!-- Start loading toc.js asap -->
+        <script src="toc.js"></script>
+    </head>
+    <body>
+    <div id="body-container">
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                var theme = localStorage.getItem('mdbook-theme');
+                var sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            var theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            const html = document.documentElement;
+            html.classList.remove('light')
+            html.classList.add(theme);
+            html.classList.add("js");
+        </script>
+
+        <input type="checkbox" id="sidebar-toggle-anchor" class="hidden">
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            var sidebar = null;
+            var sidebar_toggle = document.getElementById("sidebar-toggle-anchor");
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            } else {
+                sidebar = 'hidden';
+            }
+            sidebar_toggle.checked = sidebar === 'visible';
+            html.classList.remove('sidebar-visible');
+            html.classList.add("sidebar-" + sidebar);
+        </script>
+
+        <nav id="sidebar" class="sidebar" aria-label="Table of contents">
+            <!-- populated by js -->
+            <mdbook-sidebar-scrollbox class="sidebar-scrollbox"></mdbook-sidebar-scrollbox>
+            <noscript>
+                <iframe class="sidebar-iframe-outer" src="toc.html"></iframe>
+            </noscript>
+            <div id="sidebar-resize-handle" class="sidebar-resize-handle">
+                <div class="sidebar-resize-indicator"></div>
+            </div>
+        </nav>
+
+        <div id="page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                <div id="menu-bar-hover-placeholder"></div>
+                <div id="menu-bar" class="menu-bar sticky">
+                    <div class="left-buttons">
+                        <label id="sidebar-toggle" class="icon-button" for="sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="sidebar">
+                            <i class="fa fa-bars"></i>
+                        </label>
+                        <button id="theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="theme-list">
+                            <i class="fa fa-paint-brush"></i>
+                        </button>
+                        <ul id="theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="ayu">Ayu</button></li>
+                        </ul>
+                        <button id="search-toggle" class="icon-button" type="button" title="Search. (Shortkey: s)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="S" aria-controls="searchbar">
+                            <i class="fa fa-search"></i>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">The VeriFast for Rust Reference</h1>
+
+                    <div class="right-buttons">
+                        <a href="print.html" title="Print this book" aria-label="Print this book">
+                            <i id="print-button" class="fa fa-print"></i>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="search-wrapper" class="hidden">
+                    <form id="searchbar-outer" class="searchbar-outer">
+                        <input type="search" id="searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="searchresults-outer" aria-describedby="searchresults-header">
+                    </form>
+                    <div id="searchresults-outer" class="searchresults-outer hidden">
+                        <div id="searchresults-header" class="searchresults-header"></div>
+                        <ul id="searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="content" class="content">
+                    <main>
+                        <h1 id="introduction"><a class="header" href="#introduction">Introduction</a></h1>
+<p>VeriFast is a tool for modular formal verification of the absence of <a href="https://doc.rust-lang.org/reference/behavior-considered-undefined.html">undefined
+behavior</a>
+in Rust<sup class="footnote-reference"><a href="#other-languages">1</a></sup> programs that use <code>unsafe</code> blocks and the
+<a href="https://doc.rust-lang.org/nomicon/working-with-unsafe.html">soundness</a> of Rust
+modules that use <code>unsafe</code> blocks. It works by <em>symbolically executing</em> each
+function separately, using a <em>separation logic</em> representation of memory,
+starting from a symbolic state that represents an arbitrary program state that
+satisfies the function's <em>precondition</em>, and checking that each state at which
+the function returns satisfies the function's <em>postcondition</em>. By using the
+callee's precondition and postcondition instead of its body when symbolically
+executing a function call, and by using the user-specified loop invariant when
+symbolically executing a loop so as to be able to symbolically execute the loop
+body only once, and by using <em>symbols</em> to represent possibly infinitely many
+program states using a finite number of symbolic states, VeriFast covers all
+(usually infinitely many) possible executions of a function using a finite (and
+usually small) number of symbolic executions, allowing the verification of
+(small) programs to usually complete in a matter of seconds.</p>
+<p>For functions not declared as <code>unsafe</code>, VeriFast derives a precondition and
+postcondition from the function's parameter types and return type using the
+separation logic interpretation of Rust's types defined by
+<a href="https://research.ralfj.de/thesis.html">RustBelt</a>; for functions declared as
+<code>unsafe</code>, the user has to provide a precondition and postcondition by inserting
+specially marked comments called <em>annotations</em> into the source code. Similarly, for each loop a loop
+invariant has to be provided in an annotation. To be able to
+express these conditions (called <em>assertions</em>), the user may generally also have
+to insert annotations defining mathematical recursive datatypes called
+<em>inductive datatypes</em>, mathematical recursive functions over these datatypes
+called <em>fixpoint functions</em>, recursive named separation logic assertions called
+<em>predicates</em>, and <em>type predicates</em> defining a custom interpretation for some of the
+struct types defined by the current module (as well as some less common constructs
+such as <em>VeriFast named function types</em>, <em>lemma function types</em>, <em>predicate
+families</em>, and <em>predicate family instances</em>).</p>
+<p>In order for symbolic execution to succeed, the user may furthermore have to
+insert annotations containing <em>ghost commands</em> such as <code>open</code> and <code>close</code>
+commands for unfolding and folding predicates and calls of <em>lemma functions</em>,
+possibly recursive functions defined inside annotations that are checked by
+VeriFast to terminate and to not have side-effects and that serve as possibly
+inductive proofs about fixpoint functions and predicates.</p>
+<p>This reference defines the syntax of the various kinds of annotations, and
+describes VeriFast's symbolic execution algorithm and the various checks that
+VeriFast performs.</p>
+<h2 id="the-state-of-verifast"><a class="header" href="#the-state-of-verifast">The state of VeriFast</a></h2>
+<p>VeriFast has been developed by Bart Jacobs, Jan Smans, and Frank Piessens at KU
+Leuven, Department of Computer Science, DistriNet research group since 2008,
+with many contributions from contributors inside and outside DistriNet. VeriFast
+for Rust has been developed by Nima Rahimi Foroushaani and Bart Jacobs at
+DistriNet since 2022. The lead developer and main maintainer is Bart Jacobs, an
+associate professor at DistriNet, who combines these activities with his usual
+research, education, and service duties. The largest verification performed so far with
+VeriFast for Rust, the verification of certain properties of certain functions
+of the Rust standard library's LinkedList data structure, was performed in
+December 2024. Its support for the Rust language is as of yet very incomplete<sup class="footnote-reference"><a href="#other-languages-incomplete">2</a></sup>,
+so that for any new nontrivial use case, it is to be expected, for now, that the
+tool will have to be extended. Bart Jacobs is eager to support anyone interested
+in using VeriFast. However, despite his best intentions, he may get distracted
+by other occupations; in that case, please do not hesitate to remind him early
+and often---your continued showing of interest will only delight him and you may
+rest assured that, given sufficient prodding, your issue will be resolved eventually.</p>
+<h2 id="the-state-of-this-reference"><a class="header" href="#the-state-of-this-reference">The state of this reference</a></h2>
+<p>This reference is under construction; much material is still missing. Please
+bear with us! But if there are particular parts you're particularly eager to
+see, it always helps to let us know.</p>
+<div class="footnote-definition" id="other-languages"><sup class="footnote-definition-label">1</sup>
+<p>VeriFast also supports (subsets of) C and Java.</p>
+</div>
+<div class="footnote-definition" id="other-languages-incomplete"><sup class="footnote-definition-label">2</sup>
+<p>as is its support for Java and, to a somewhat lesser extent, C</p>
+</div>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="symbolic-execution-states"><a class="header" href="#symbolic-execution-states">Symbolic execution states</a></h1>
+<p>A symbolic execution state consists of the following components:</p>
+<ul>
+<li>A <em>symbolic store</em>, mapping each local variable name in scope whose address is not taken to a term representing its current value, and each local variable in scope whose address is taken to a term representing a pointer to the variable.</li>
+<li>A <em>symbolic heap</em>, a multiset of <em>heap chunks</em> representing the resources owned by the code being verified. Note: "symbolic heap" and "heap chunk" are slightly misleading names, because ownership of non-heap resources, such as global variables or stack-allocated variables whose address is taken<sup class="footnote-reference"><a href="#nonheapchunks">1</a></sup>, is also represented as "heap chunks"; more accurate names would have been "symbolic multiset of owned resources" and "chunk of resource".</li>
+<li>A <em>path condition</em>, a set of formulae (terms of type <code>bool</code>) encoding the assumptions made about the symbols used on the current symbolic execution path.</li>
+</ul>
+<p>These components are shown in the <em>Locals</em> pane, the <em>Heap chunks</em> pane, and the <em>Assumptions</em> pane of the VeriFast IDE, respectively.</p>
+<p>A heap chunk consists of the following components:</p>
+<ul>
+<li>The chunk's <em>coefficient</em>: a term representing a real number. In case of an application of a built-in predicate representing a region of memory, the coefficient is always greater than zero and not greater than one. If the coefficient equals one, it's a <em>full chunk</em> denoting read/write access; otherwise, it's a <em>fractional chunk</em> denoting read-only access. In case of a user-defined predicate, the meaning is given by distributing the multiplication by the coefficient over the separating conjunctions in the predicate's body. If a chunk's coefficient is the literal term <code>1</code>, it is not shown in the VeriFast IDE.</li>
+<li>The chunk's <em>predicate</em>: a term representing a predicate value. When processing a predicate definition, VeriFast allocates a fresh predicate symbol to represent the predicate; also, each predicate constructor is associated with a function symbol mapping a predicate constructor argument list to a predicate value.</li>
+<li>The chunk's <em>type arguments</em>, a list of types with which to instantiate the predicate's type parameters.</li>
+<li>The chunk's <em>arguments</em>, a list of terms with which to instantiate the predicate's parameters.</li>
+<li>Optionally, the chunk's <em>size</em>. This is only potentially present when verifying a lemma function whose precondition's first separating conjunct is a predicate assertion. In that context, chunks derived from the first chunk produced by the lemma function's precondition through N <em>open</em> operations have size -N. This component is used to verify termination of lemma functions defined by induction on the derivation of the precondition's first chunk.</li>
+</ul>
+<p>A predicate is either built-in or user-defined. All built-in predicates are declared in the <a href="https://github.com/verifast/verifast/blob/master/bin/rust/prelude.rsspec">prelude</a>, in <code>bin/rust/prelude.rsspec</code>, or are automatically generated by VeriFast when it processes certain declarations. The most important ones are the following:</p>
+<ul>
+<li><code>pred points_to_&lt;T&gt;(p: *T, v: option&lt;T&gt;)</code>: a chunk <code>points_to_::&lt;T&gt;(p, v)</code> denotes ownership of a variable of type T pointed to by properly aligned pointer <code>p</code>. If <code>v</code> is <code>some(V)</code>, the variable is initialized and holds value V; otherwise, it is uninitialized. Since the points-to chunk for a variable is consumed when the variable is deallocated, ownership of a points-to chunk implies that the pointer is non-dangling.</li>
+<li><code>pred points_to&lt;T&gt;(p: *T, v: T)</code>: equivalent to <code>points_to_::&lt;T&gt;(p, some(v))</code>.</li>
+<li><code>pred array_&lt;T&gt;(p: *T, n: i32, vs: list&lt;option&lt;T&gt;&gt;)</code>: a chunk <code>array_::&lt;T&gt;(p, n, vs)</code> denotes ownership of an array of <code>n</code> components of type T, pointed to by properly aligned pointer <code>p</code>. List <code>vs</code> of length <code>n</code> holds each component's value, if it is initialized, or <code>none</code> if it is not.</li>
+<li><code>pred array&lt;T&gt;(p: *T, n: i32, vs: list&lt;T&gt;)</code>: denotes ownership of a fully initialized array.</li>
+<li>When processing a definition of a struct S with fields F1: T1 through Fn: Tn, VeriFast introduces <em>field predicates</em> <code>pred S_F1_(p: *S, v: option&lt;T1&gt;) = points_to_::&lt;T1&gt;(&amp;(*p).F1, v)</code> and <code>pred S_F1(p: *S, v: T1) = points_to::&lt;T&gt;(&amp;(*p).F1, v)</code> through <code>S_Fn_</code> and <code>S_Fn</code>, as well as a <em>padding predicate</em> <code>pred struct_S_padding(p: *S)</code>.</li>
+</ul>
+<div class="footnote-definition" id="nonheapchunks"><sup class="footnote-definition-label">1</sup>
+<p>Other examples are <em>ghost cells</em> and, when reasoning about the program's I/O behavior, resources representing the state of the external world.</p>
+</div>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="annotations"><a class="header" href="#annotations">Annotations</a></h1>
+<p>This chapter defines the syntax and the semantics of the various contructs that may appear inside VeriFast annotations.</p>
+<ul>
+<li><a href="keywords.html">Keywords</a></li>
+<li><a href="types.html">Types</a></li>
+<li><a href="expressions.html">Expressions</a></li>
+<li><a href="assertions.html">Assertions</a></li>
+<li><a href="func-specs.html">Function specifications</a></li>
+<li><a href="func-body-annots.html">Function body annotations</a>
+<ul>
+<li><a href="func-body-annots.html#ghost-commands">Ghost commands</a></li>
+<li><a href="func-body-annots.html#block-annotations">Block annotations</a></li>
+<li><a href="func-body-annots.html#call-annotations">Call annotations</a></li>
+</ul>
+</li>
+<li><a href="ghost-decls.html">Ghost declarations</a></li>
+</ul>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="keywords"><a class="header" href="#keywords">Keywords</a></h1>
+<p>In annotations, these words, in addition to Rust's keywords, are recognized as keywords and cannot be used as identifiers:</p>
+<blockquote>
+<p><code>_</code> <code>above</code> <code>abstract_type</code> <code>activating</code> <code>action</code> <code>and_fresh_handle</code><br />
+<code>and_handle</code> <code>any</code> <code>assert</code> <code>assume_correct</code> <code>below</code> <code>box_class</code> <code>by</code> <code>close</code><br />
+<code>consuming_box_pred</code> <code>consuming_handle_pred</code> <code>copred</code> <code>create_box</code><br />
+<code>create_fresh_handle</code> <code>create_handle</code> <code>decreases</code> <code>dispose_box</code><br />
+<code>dup_lem_ptr_chunk</code> <code>emp</code> <code>ens</code> <code>extends</code> <code>fix</code> <code>fix_auto</code> <code>fn_type</code><br />
+<code>forall_</code> <code>handle</code> <code>handle_pred</code> <code>import_module</code> <code>inductive</code> <code>inv</code> <code>leak</code><br />
+<code>lem</code> <code>lem_auto</code> <code>lem_type</code> <code>let_lft</code> <code>merge_fractions</code><br />
+<code>nonghost_callers_only</code> <code>open</code> <code>perform_action</code> <code>permbased</code> <code>pred</code><br />
+<code>pred_ctor</code> <code>pred_fam</code> <code>pred_fam_inst</code> <code>preserved_by</code> <code>produce_fn_ptr_chunk</code><br />
+<code>produce_lem_ptr_chunk</code> <code>producing_box_pred</code> <code>producing_fresh_handle_pred</code><br />
+<code>producing_handle_pred</code> <code>req</code> <code>require_module</code> <code>split_fraction</code> <code>terminates</code><br />
+<code>truncating</code> <code>type_pred_decl</code> <code>type_pred_def</code> <code>typedef</code> <code>typeid</code><br />
+<code>unloadable_module</code></p>
+</blockquote>
+<p>These are the additional operators recognized inside annotations:</p>
+<blockquote>
+<p><code>&amp;*&amp;</code> <code>|-&gt;</code> <code>|-?-&gt;</code> <code>@</code></p>
+</blockquote>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="types"><a class="header" href="#types">Types</a></h1>
+<p>Inside annotations, the syntax of types is extended as follows:</p>
+<blockquote>
+<p><strong><sup>Syntax</sup></strong><br />
+<em>Type</em> :<br />
+      ... | <code>*_</code> | <code>any</code> | <em>PureFunctionType</em> | <em>PredicateType</em> | <code>real</code></p>
+<p><em>PureFunctionType</em> :<br />
+      <code>fix</code> <code>(</code> ( <em>ParamType</em> <code>,</code> )<sup>*</sup> <em>ParamType</em><sup>?</sup> <code>)</code></p>
+<p><em>ParamType</em> :<br />
+      (IDENTIFIER <code>:</code>)<sup>?</sup> <em>Type</em></p>
+<p><em>PredicateType</em> :<br />
+      <code>pred</code> <code>(</code> ((( <em>ParamType</em> <code>,</code> )<sup><em></sup> <em>ParamType</em> )<sup>?</sup> <code>;</code> )<sup>?</sup> ( <em>ParamType</em> <code>,</code> )<sup></em></sup> <em>ParamType</em><sup>?</sup> <code>)</code></p>
+</blockquote>
+<p>In addition to (some subset of) Rust's types, VeriFast supports the following types:</p>
+<ul>
+<li>Type <code>*_</code> (<em>pointer-to-anything</em>) is a pointer type implicitly convertible to any other pointer type. It is analogous to C's <code>void *</code>.</li>
+<li>Type <code>any</code> is the union of all inductive types that themselves contain <code>any</code> only in positive positions.</li>
+<li>The <em>pure function type</em> <code>fix(T1, ..., Tn, U)</code> is the type of mathematical functions taking N arguments, of types T1 through Tn, and returning a value of type U.</li>
+<li>The <em>predicate type</em> <code>pred(T1, ..., Tn)</code> is the type of separation logic predicates taking N arguments, of types T1 through Tn. The type <code>pred(T1, ..., Tn; U1, ..., Um)</code> is the type of <em>precise</em> separation logic predicates taking N input arguments and M output arguments.</li>
+<li>Type <code>real</code> is the type of real numbers. (It is mostly used for chunk coefficients and for reasoning about floating-point numbers.)</li>
+</ul>
+<p>In pure function types and predicate types, parameter names may optionally be written for documentation purposes; they are ignored by VeriFast.</p>
+<p>Note, furthermore:</p>
+<ul>
+<li>VeriFast does not distinguish between <code>*const T</code> and <code>*mut T</code> and supports the syntax <code>*T</code>. That is, VeriFast treats the type expressions <code>*const T</code>, <code>*mut T</code>, and <code>*T</code> identically.</li>
+<li>When used as the type of a ghost variable (e.g. a pure function parameter or return value, a predicate parameter, a lemma parameter, or a ghost cell) or as the type of an expression in an annotation, all integer types are interpreted as the mathematical type ℤ of all integers. Also, inside annotations arithmetic operations on integers are always interpreted as operations on ℤ and never wrap around.</li>
+</ul>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="expressions"><a class="header" href="#expressions">Expressions</a></h1>
+<blockquote>
+<p><strong><sup>Syntax</sup></strong><br />
+<em>Expression</em> : ... | <em>Lifetime</em> | <code>typeid</code> <code>(</code> <em>Type</em> <code>)</code></p>
+</blockquote>
+<p>The syntax of expressions in annotations is the same as in Rust code, with two additional supported forms:</p>
+<ul>
+<li>A lifetime parameter in scope may be used as an expression. This denotes the RustBelt <code>lifetime_t</code> value corresponding to that lifetime parameter.</li>
+<li>The expression <code>typeid(T)</code> denotes the typeid of type T.</li>
+</ul>
+<p>Also, certain Rust expressions are interpreted differently in annotations than in Rust code:</p>
+<ul>
+<li>Array expressions are interpreted as <code>list&lt;T&gt;</code> values. For example, <code>[10, 20, 30]</code> is interpreted as <code>cons(10, cons(20, cons(30, nil)))</code>.</li>
+<li>Arithmetic expressions on integer types are interpreted as operations on the mathematical set ℤ of all integers; they produce their mathematical result and never wrap around.</li>
+</ul>
+<p>Note that <code>match</code> expressions may be used to perform case analysis on values of VeriFast inductive types.</p>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="assertions"><a class="header" href="#assertions">Assertions</a></h1>
+<blockquote>
+<p><strong><sup>Syntax</sup></strong><br />
+<em>Assertion</em> :<br />
+      <em>PointsToAssertion</em><br />
+   | <em>PredicateAssertion</em><br />
+   | <em>TypePredicateAssertion</em><br />
+   | <em>BooleanAssertion</em><br />
+   | <em>PatternMatchingEqualityAssertion</em><br />
+   | <em>ConditionalAssertion</em><br />
+   | <em>MatchAssertion</em><br />
+   | <em>Assertion</em> <code>&amp;*&amp;</code> <em>Assertion</em></p>
+<p><em>PointsToAssertion</em> : ( <code>[</code> <em>VFPattern</em> <code>]</code> )<sup>?</sup> <em>Expression</em> ( <code>|-&gt;</code> | <code>|-?-&gt;</code> ) <em>VFPattern</em></p>
+<p><em>VFPattern</em> : <code>_</code> | <code>?</code> ( IDENTIFIER | <code>_</code> ) | Expression</p>
+<p><em>PredicateAssertion</em> : ( <code>[</code> <em>VFPattern</em> <code>]</code> )<sup>?</sup> <em>Expression</em> <em>VFPatternList</em> <sup>?</sup> <em>VFPatternList</em></p>
+<p><em>VFPatternList</em> : <code>(</code> (( <em>VFPattern</em> <code>,</code> )<sup>*</sup> <em>VFPattern</em> )<sup>?</sup> <code>)</code></p>
+<p><em>TypePredicateAssertion</em> : <code>&lt;</code> <em>Type</em> <code>&gt;</code> <code>.</code> IDENTIFIER <em>VFPatternList</em></p>
+<p><em>BooleanAssertion</em> : <em>Expression</em></p>
+<p><em>PatternMatchingEqualityAssertion</em> : <em>Expression</em> <code>==</code> <em>VFPattern</em></p>
+<p><em>ConditionalAssertion</em> : <code>if</code> <em>Expression</em> <code>{</code> <em>Assertion</em> <code>}</code> <code>else</code> <code>{</code> <em>Assertion</em> <code>}</code></p>
+<p><em>MatchAssertion</em> : <code>match</code> <em>Scrutinee</em> <code>{</code> ( <em>MatchAssertionArm</em> <code>,</code><sup>?</sup> )<sup>*</sup> <code>}</code></p>
+<p><em>MatchAssertionArm</em> : <em>Pattern</em> <code>=&gt;</code> <em>Assertion</em></p>
+</blockquote>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="function-specifications"><a class="header" href="#function-specifications">Function specifications</a></h1>
+<p>VeriFast accepts the following <em>specification clauses</em> between a function's header and its body:</p>
+<blockquote>
+<p><strong><sup>Syntax</sup></strong><br />
+<em>SpecificationClause</em> :<br />
+      <code>/*@</code> <code>req</code> <em>Assertion</em> <code>;</code> <code>@*/</code><br />
+   | <code>/*@</code> <code>ens</code> <em>Assertion</em> <code>;</code> <code>@*/</code> <br />
+   | <code>/*@</code> <code>assume_correct</code> <code>@*/</code></p>
+</blockquote>
+<p>Note that VeriFast also support single-line annotations of the form <code>//@ ...annotation...</code>. Such an annotation is entirely equivalent to <code>/*@ ...annotation... @*/</code>.</p>
+<p>Notice that the requires clause and the ensures clause must be in separate annotations.</p>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="function-body-annotations"><a class="header" href="#function-body-annotations">Function body annotations</a></h1>
+<h2 id="ghost-commands"><a class="header" href="#ghost-commands">Ghost commands</a></h2>
+<p>VeriFast accepts the following <em>ghost commands</em> as annotations in positions where statements are allowed in Rust code.</p>
+<div class="warning">
+<blockquote>
+<p>VeriFast preprocesses <code>.rs</code> files to replace annotations inside function bodies by dummy <code>VeriFast_ghost_command();</code> statements.
+If an annotation inside a function body appears in a position where
+such a call is not allowed, you may get a confusing Rust compiler error.</p>
+</blockquote>
+</div>
+<blockquote>
+<p><strong><sup>Syntax</sup></strong><br />
+<em>GhostCommandAnnotation</em> : <code>/*@</code> <em>GhostCommand</em> <code>@*/</code></p>
+<p><em>GhostCommand</em> :<br />
+      <code>open</code> <em>PredicateAssertion</em> <code>;</code><br />
+   | <code>close</code> <em>PredicateAssertion</em> <code>;</code><br />
+   | <code>let</code> IDENTIFIER <code>=</code> <em>Expression</em> <code>;</code><br />
+   | <code>if</code> <em>Expression</em> <code>{</code> <em>GhostCommand</em> <sup>*</sup> <code>}</code> ( <code>else</code> <code>{</code> <em>GhostCommand</em> <sup>*</sup> <code>}</code> )<sup>?</sup><br />
+   | <code>match</code> <em>Scrutinee</em> <code>{</code> <em>MatchGhostCommandArm</em> <sup>*</sup> <code>}</code><br />
+   | <code>assert</code> <em>Assertion</em> <code>;</code><br />
+   | <code>leak</code> <em>Assertion</em> <code>;</code><br />
+   | <code>produce_lem_ptr_chunk</code> <em>TypePath</em> <code>(</code> (( <em>Expression</em> <code>,</code> )<sup>*</sup> <em>Expression</em> )<sup>?</sup> <code>)</code> <code>(</code> (( IDENTIFIER <code>,</code> )<sup><em></sup> IDENTIFIER )<sup>?</sup> <code>)</code> <code>{</code> <em>GhostCommand</em> <sup>*</sup> <code>}</code> ( <code>;</code> | <code>{</code> <em>GhostCommand</em> <sup>*</sup> <code>}</code> )<br />
+   | <code>produce_fun_ptr_chunk</code> <em>TypePath</em> <code>(</code> <em>Expression</em> <code>)</code> <code>(</code> (( <em>Expression</em> <code>,</code> )<sup>*</sup> <em>Expression</em> )<sup>?</sup> <code>)</code> <code>(</code> (( IDENTIFIER <code>,</code> )<sup></em></sup> IDENTIFIER )<sup>?</sup> <code>)</code> <code>{</code> <em>GhostCommand</em> <sup>*</sup> <code>}</code><br />
+   | <code>{</code> <em>GhostDeclaration</em> <sup>*</sup> <em>GhostCommand</em> <sup>*</sup> <code>}</code><br />
+   | <code>return</code> <em>Expression</em> <sup>?</sup> <code>;</code><br />
+   | <em>Expression</em> <code>;</code></p>
+</blockquote>
+<p>A <code>return</code> ghost command may only appear in a lemma body, not in a ghost command annotation.</p>
+<h2 id="block-annotations"><a class="header" href="#block-annotations">Block annotations</a></h2>
+<p>Additionally, a Rust block may start with one of the following VeriFast annotations:</p>
+<ul>
+<li>a loop invariant of the form <code>/*@</code> <code>inv</code> <em>Assertion</em> <code>;</code> <code>@*/</code></li>
+<li>a loop specification of the form <code>/*@</code> <code>req</code> <em>Assertion</em> <code>;</code> <code>ens</code> <em>Assertion</em> <code>;</code> <code>@*/</code>. Notice that here, the requires clause and the ensures clause must be in the same annotation, whereas in the case of function specifications they must be in separate annotations.</li>
+<li>a batch of ghost declarations of the form <code>/*@</code> <em>GhostDeclaration</em> <sup>*</sup> <code>@*/</code> The declarations supported in such batches are predicate definitions, lemma definitions, and local lifetime variable definitions (using <code>let_lft</code>).</li>
+</ul>
+<h2 id="call-annotations"><a class="header" href="#call-annotations">Call annotations</a></h2>
+<p>Furthermore, a <em>ghost generic argument list</em> annotation may be inserted between the function name and the argument list of a Rust function call, like so: <code>foo/*@::&lt;'a, T&gt;@*/</code>. This is necessary in cases where it is important to pass a particular lifetime as a generic argument to a function. If, for a function call, no ghost generic argument list is provided, VeriFast uses <code>'static</code> as the argument for each of the function's lifetime parameters.</p>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="ghost-declarations"><a class="header" href="#ghost-declarations">Ghost declarations</a></h1>
+<p>A ghost declarations annotation may appear anywhere a Rust item may appear, except that only a few kinds of ghost declarations are supported inside function bodies (see <a href="func-body-annots.html#block-annotations">Block annotations</a>).</p>
+<blockquote>
+<p><strong><sup>Syntax</sup></strong><br />
+<em>GhostDeclarationsAnnotation</em> : <code>/*@</code> <em>GhostDeclaration</em> <sup>*</sup> <code>@*/</code></p>
+<p><em>GhostDeclaration</em> :<br />
+      <code>pub</code> <em>GhostDeclaration</em><br />
+   | <code>inductive</code> IDENTIFIER <em>GenericParams</em> <sup>?</sup> <code>=</code> <code>|</code><sup>?</sup> <em>InductiveConstructor</em> ( <code>|</code> <em>InductiveConstructor</em> )<sup>*</sup> <code>;</code><br />
+   | <code>fix</code> IDENTIFIER <em>GenericParams</em> <sup>?</sup> <code>(</code> <em>Params</em> <code>)</code> ( <code>-&gt;</code> <em>Type</em> )<sup>?</sup> ( <code>{</code> <em>Expression</em> <code>}</code> | <code>;</code> )<br />
+   | <code>pred</code> IDENTIFIER <em>GenericParams</em> <sup>?</sup> <code>(</code> ( <em>Params</em> <code>;</code> )<sup>?</sup> <em>Params</em> <code>)</code> ( <code>=</code> <em>Assertion</em> )<sup>?</sup> <code>;</code><br />
+   | <code>pred_ctor</code> IDENTIFIER <em>GenericParams</em> <sup>?</sup> <code>(</code> <em>Params</em> <code>)</code> <code>(</code> ( <em>Params</em> <code>;</code> )<sup>?</sup> <em>Params</em> <code>)</code> <code>=</code> <em>Assertion</em> <code>;</code><br />
+   | <code>pred</code> <em>GenericParams</em> <sup>?</sup> <code>&lt;</code> <em>Type</em> <code>&gt;</code> <code>.</code> IDENTIFIER <code>(</code> ( <em>ParamNames</em> <code>;</code> )<sup>?</sup> <em>ParamNames</em> <code>)</code> <code>=</code> <em>Assertion</em> <code>;</code><br />
+   | <code>lem</code> IDENTIFIER <em>GenericParams</em> <sup>?</sup> <code>(</code> <em>Params</em> <code>)</code> ( <code>-&gt;</code> <em>Type</em> )<sup>?</sup> <em>LemmaRest</em><br />
+   | <code>fn_type</code> IDENTIFIER <em>GenericParams</em> <sup>?</sup> <code>(</code> <em>Params</em> <code>)</code> <code>=</code> <code>unsafe</code> <code>fn</code> <code>(</code> <em>Params</em> <code>)</code> ( <code>-&gt;</code> <em>Type</em> )<sup>?</sup> <code>;</code> <code>req</code> <em>Assertion</em> <code>;</code> <code>ens</code> <em>Assertion</em> <code>;</code><br />
+   | <code>lem_type</code> IDENTIFIER <em>GenericParams</em> <sup>?</sup> <code>(</code> <em>Params</em> <code>)</code> <code>=</code> <code>lem</code> <code>(</code> <em>Params</em> <code>)</code> ( <code>-&gt;</code> <em>Type</em> )<sup>?</sup> <code>;</code> <code>req</code> <em>Assertion</em> <code>;</code> <code>ens</code> <em>Assertion</em> <code>;</code><br />
+   | <code>let_lft</code> <em>Lifetime</em> <code>=</code> <em>Expression</em> <code>;</code><br />
+   | <code>abstract_type</code> IDENTIFIER <code>;</code></p>
+<p><em>InductiveConstructor</em> : IDENTIFIER ( <code>(</code> ( <em>ParamType</em> <code>,</code> )<sup>*</sup> <em>ParamType</em> <code>)</code> )<sup>?</sup></p>
+<p><em>LemmaRest</em> :<br />
+      <em>LemmaSpecification</em> <code>{</code> <em>GhostCommand</em> <sup>*</sup> <code>}</code><br />
+   | <code>;</code> <em>LemmaSpecification</em></p>
+<p><em>LemmaSpecification</em> : <code>nonghost_callers_only</code><sup>?</sup> <code>req</code> <em>Assertion</em> <code>;</code> <code>ens</code> <em>Assertion</em> <code>;</code></p>
+<p><em>Params</em> : (( <em>Param</em> <code>,</code> )<sup>*</sup> <em>Param</em> )<sup>?</sup></p>
+<p><em>Param</em> : IDENTIFIER <code>:</code> <em>Type</em></p>
+<p><em>ParamNames</em> : (( IDENTIFIER <code>,</code> )<sup>*</sup> IDENTIFIER )<sup>?</sup></p>
+</blockquote>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="verifying-non-unsafe-functions"><a class="header" href="#verifying-non-unsafe-functions">Verifying non-<code>unsafe</code> functions</a></h1>
+<h2 id="rustbelt"><a class="header" href="#rustbelt">RustBelt</a></h2>
+<p>A core value proposition of Rust is that well-typed programs have no undefined behavior, under certain conditions on the use of <code>unsafe</code> blocks. The <a href="https://plv.mpi-sws.org/rustbelt/">RustBelt</a> project has developed a mathematically precise proposal for what those conditions are. In this proposal, a <em>semantics</em> is defined for Rust's types and typing judgments in <em>separation logic</em>, providing a definition of whether a function is <em>semantically well-typed</em> that talks only about the function's <em>behavior</em>, not about its precise syntactic structure, and is therefore applicable to functions containing <code>unsafe</code> blocks. They have proven the soundness of Rust's type checker with respect to this semantics, implying that if a function that does not contain <code>unsafe</code> blocks is syntactically well-typed, then it is semantically well-typed. Therefore, if a program consists of modules that use <code>unsafe</code> blocks and client code that does not, it suffices to establish that these modules are semantically well-typed to be able to conclude that the program as a whole is semantically well-typed and therefore has no undefined behavior.<sup class="footnote-reference"><a href="#rustbelt-limitations">1</a></sup></p>
+<p>In order to be able to express the semantics of mutable references and shared references, as well as the semantics of many of the uses of <em>interior mutability</em> in the Rust standard library, the RustBelt authors have proposed the <em>lifetime logic</em>, which defines separation logic concepts such as <em>lifetime tokens</em>, <em>full borrows</em>, <em>fractured borrows</em>, <em>thread tokens</em>, and <em>nonatomic borrows</em>.</p>
+<p>An excellent resource for learning more about the RustBelt proposal and the advanced separation logic Iris that underlies it is <a href="https://research.ralfj.de/thesis.html">Ralf Jung's thesis</a>.</p>
+<div class="footnote-definition" id="rustbelt-limitations"><sup class="footnote-definition-label">1</sup>
+<p>More accurately speaking, the RustBelt authors have defined semantic well-typedness for a somewhat simplified version of Rust called lambda-Rust, and have proven soundness of lambda-Rust's type checker, which is a simplified version of that of Rust. Notable aspects not taken into account in the original RustBelt work include destructors (<code>drop</code>), unwinding, and Rust's aliasing rules.</p>
+</div>
+<h2 id="rustbelt-and-the-lifetime-logic-in-verifast"><a class="header" href="#rustbelt-and-the-lifetime-logic-in-verifast">RustBelt and the lifetime logic in VeriFast</a></h2>
+<p>An axiomatisation of the lifetime logic into VeriFast's logic and some further RustBelt-related definitions and axioms can be found in the following files:</p>
+<ul>
+<li><a href="https://github.com/verifast/verifast/blob/master/bin/rust/rust_belt/lifetime_logic.rsspec"><code>bin/rust/rust_belt/lifetime_logic.rsspec</code></a></li>
+<li><a href="https://github.com/verifast/verifast/blob/master/bin/rust/rust_belt/general.rsspec"><code>bin/rust/rust_belt/general.rsspec</code></a></li>
+</ul>
+<h2 id="semantic-well-typedness-of-functions-in-verifast"><a class="header" href="#semantic-well-typedness-of-functions-in-verifast">Semantic well-typedness of functions in VeriFast</a></h2>
+<p>If a crate under verification defines a function not marked as <code>unsafe</code>, VeriFast generates a specification for that function that expresses the function's semantic well-typedness. If the function is annotated with an explicit specification as well, VeriFast first verifies that the explicit specification implies the generated one, and then verifies the function body against the explicit specification; otherwise, VeriFast verifies the function body against the generated specification.</p>
+<p>For a function <code>fn f&lt;'a, 'b : 'a, T, U&gt;(x1: T1, ..., xN: TN) -&gt; U</code>, the generated specification is as follows:</p>
+<pre><code>req thread_token(?_t) &amp;*&amp;
+    [?_q_a]lifetime_token('a) &amp;*&amp;
+    [?_q_b]lifetime_token('b) &amp;*&amp; 
+    lifetime_inclusion('a, 'b) == true &amp;*&amp;
+    &lt;T1&gt;.own(_t, x1) &amp;*&amp;
+    ...
+    &lt;TN&gt;.own(_t, xN);
+ens thread_token(_t) &amp;*&amp;
+    [_q_a]lifetime_token('a) &amp;*&amp;
+    [_q_b]lifetime_token('b) &amp;*&amp;
+    &lt;U&gt;.own(_t, result);
+</code></pre>
+<h3 id="drop-functions"><a class="header" href="#drop-functions">Drop functions</a></h3>
+<p>If the crate under verification implements Drop for a struct <code>S&lt;'a&gt;</code> with fields <code>f1 : T1</code> through <code>fN : TN</code>, VeriFast generates the following specification for <code>drop(&amp;mut self)</code>:</p>
+<pre><code>req thread_token(?_t) &amp;*&amp;
+    [?_q_a]lifetime_token('a) &amp;*&amp;
+    &lt;S&gt;.full_borrow_content(_t, self);
+ens thread_token(_t) &amp;*&amp;
+    [_q_a]lifetime_token('a) &amp;*&amp;
+    &lt;T1&gt;.full_borrow_content(_t, &amp;(*self).f1) &amp;*&amp;
+    ...
+    &lt;TN&gt;.full_borrow_content(_t, &amp;(*self).fN);
+</code></pre>
+<h2 id="semantics-of-types-in-verifast"><a class="header" href="#semantics-of-types-in-verifast">Semantics of types in VeriFast</a></h2>
+<p>For simple types T such as <code>bool</code> and the integer types, we simply have <code>&lt;T&gt;.own(t, x) = true</code>. Here are some more interesting cases:</p>
+<ul>
+<li><code>&lt;&amp;'a mut T&gt;.own(t, l) = full_borrow('a, &lt;T&gt;.full_borrow_content(t, l))</code></li>
+<li><code>&lt;&amp;'a T&gt;.own(t, l) = &lt;T&gt;.share('a, t, l)</code></li>
+</ul>
+<p>For any type T, we have <code>&lt;T&gt;.full_borrow_content(t, l) = *l |-&gt; ?x &amp;*&amp; &lt;T&gt;.own(t, x)</code>.</p>
+<p>For simple types T such as <code>bool</code> and the integer types, we simply have <code>&lt;T&gt;.share(k, t, l) = frac_borrow(k, &lt;T&gt;.full_borrow_content(t, l))</code>.</p>
+<p>If the crate under verification defines a struct S, it can define a custom semantics for type S by defining the <code>&lt;S&gt;.own</code> and <code>&lt;S&gt;.share</code> predicates.<sup class="footnote-reference"><a href="#struct_preds">2</a></sup> If it does so, it must also prove a number of <em>proof obligations</em> about these predicates.</p>
+<div class="footnote-definition" id="struct_preds"><sup class="footnote-definition-label">2</sup>
+<p>Note: as part of processing a type predicate definition <code>pred &lt;S&gt;.p(xs) = A;</code>, VeriFast introduces a predicate definition <code>pred S_p(xs) = A;</code>. Therefore, <code>&lt;S&gt;.own</code> and <code>S_own</code> are equivalent, and so are <code>&lt;S&gt;.share</code> and <code>S_share</code>.</p>
+</div>
+<h3 id="proof-obligations-for-own"><a class="header" href="#proof-obligations-for-own">Proof obligations for <code>own</code></a></h3>
+<p>If a crate defines a struct S as well as a custom definition of <code>&lt;S&gt;.own</code>, and the struct's field types are not trivially droppable and the struct does not implement the Drop trait, then the crate must prove the following lemma:</p>
+<pre><code>lem S_drop()
+    req S_own(?t, ?s);
+    ens &lt;T1&gt;.own(t, s.f1) &amp;*&amp; ... &amp;*&amp; &lt;Tn&gt;.own(t, s.fn);
+</code></pre>
+<p>where the fields of S are <code>f1</code> through <code>fn</code> and their types are T1 through Tn.</p>
+<p>If a crate defines a struct S as well as a custom definition of <code>&lt;S&gt;.own</code>, and S is Send, and the <code>own</code> predicate mentions the thread id, then the crate must prove the following lemma:</p>
+<pre><code>lem S_send(t1: thread_id_t)
+    req S_own(?t, ?s);
+    ens S_own(t1, s);
+</code></pre>
+<h3 id="proof-obligations-for-share"><a class="header" href="#proof-obligations-for-share">Proof obligations for <code>share</code></a></h3>
+<p>If a crate defines a struct S as well as a custom definition of <code>&lt;S&gt;.share</code>, then the crate must prove the following two lemmas:</p>
+<pre><code>lem S_share_full(k: lifetime_t, t: thread_id_t, l: *S)
+    req atomic_mask(Nlft) &amp;*&amp; [?q]lifetime_token(k) &amp;*&amp; full_borrow(k, S_full_borrow_content(t, l));
+    ens atomic_mask(Nlft) &amp;*&amp; [q]lifetime_token(k) &amp;*&amp; [_]S_share(k, t, l);
+
+lem S_share_mono(k: lifetime_t, k1: lifetime_t, t: thread_id_t, l: *S)
+    req lifetime_inclusion(k1, k) == true &amp;*&amp; [_]S_share(k, t, l);
+    ens [_]S_share(k1, t, l);
+</code></pre>
+<p>Additionally, if S is Sync and the share predicate mentions the thread id, then the crate must prove the following lemma:</p>
+<pre><code>lem S_sync(t1: thread_id_t)
+    req [_]S_share(?k, ?t, ?l);
+    ens [_]S_share(k, t1, l);
+</code></pre>
+<h3 id="generic-structs"><a class="header" href="#generic-structs">Generic structs</a></h3>
+<p>If struct S is generic in type parameters T1 through Tm, each of the above lemmas must also be generic in the same parameters. Furthermore, they may additionally require and ensure <code>type_interp::&lt;Ti&gt;()</code>, for each <code>i</code>. Furthermore, if a type parameter is Send or Sync, an <code>is_Send(typeid(Ti)) == true</code> or <code>is_Sync(typeid(Ti)) == true</code> conjunct may be added to the precondition. For example:</p>
+<pre><code>lem Pair_send&lt;A, B&gt;(t1: thread_id_t)
+    req type_interp::&lt;A&gt;() &amp;*&amp; type_interp::&lt;B&gt;() &amp;*&amp; Pair_own::&lt;A, B&gt;(?t, ?pair) &amp;*&amp; is_Send(typeid(A)) &amp;&amp; is_Send(typeid(B));
+    ens type_interp::&lt;A&gt;() &amp;*&amp; type_interp::&lt;B&gt;() &amp;*&amp; Pair_own::&lt;A, B&gt;(t1, pair);
+{
+    open Pair_own::&lt;A, B&gt;(t, pair);
+    Send::send::&lt;A&gt;(t, t1, pair.fst);
+    Send::send::&lt;B&gt;(t, t1, pair.snd);
+    close Pair_own::&lt;A, B&gt;(t1, pair);
+}
+</code></pre>
+<div class="warning">
+<blockquote>
+<p>Further proof obligations are necessary to ensure soundness with respect to Rust's <a href="https://doc.rust-lang.org/nomicon/subtyping.html">variance</a> rules. VeriFast currently generates an <code>S_own_mono</code> proof obligation but its design has known problems. There are plans for an improved design but this is future work. See <a href="https://github.com/verifast/verifast/issues/610">#610</a>.</p>
+</blockquote>
+</div>
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+
+            </nav>
+
+        </div>
+
+
+
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+
+        <script src="elasticlunr.min.js"></script>
+        <script src="mark.min.js"></script>
+        <script src="searcher.js"></script>
+
+        <script src="clipboard.min.js"></script>
+        <script src="highlight.js"></script>
+        <script src="book.js"></script>
+
+        <!-- Custom JS scripts -->
+
+        <script>
+        window.addEventListener('load', function() {
+            window.setTimeout(window.print, 100);
+        });
+        </script>
+
+    </div>
+    </body>
+</html>

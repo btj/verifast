@@ -563,7 +563,8 @@ lem LinkedList_share_full<T, A>(k: lifetime_t, t: thread_id_t, l: *LinkedList<T,
         iter(nodes);
     }
     close exists(LinkedList_share_info(alloc_id, head, tail, nodes, prevs, nexts));
-    std::alloc::share_Allocator_full_borrow_content_::<A>(k, t, &(*l).alloc, alloc_id);
+    std::alloc::share_Allocator_full_borrow_content_m::<A>(k, t, &(*l).alloc, alloc_id);
+    std::alloc::close_Allocator_share(k, t, &(*l).alloc);
     leak foreach(nodes, _);
     close <LinkedList<T, A>>.share()(k, t, l);
     leak <LinkedList<T, A>>.share(k, t, l);
@@ -942,14 +943,13 @@ impl<T> Node<T> {
 
     fn into_element<A: Allocator>(self: Box<Self, A>) -> T
     //@ req thread_token(?t) &*& Box_in::<Node<T>, A>(t, self, ?alloc_id, ?node);
-    //@ ens thread_token(t) &*& result == node.element &*& Allocator::<A>(t, _, alloc_id);
+    //@ ens thread_token(t) &*& result == node.element;
     //@ on_unwind_ens thread_token(t);
     /*@
     safety_proof {
         std::boxed::own_to_Box_in(self);
         call();
         open Node_own::<T>(_, _);
-        leak Allocator(_, _, _);
     }
     @*/
     {
